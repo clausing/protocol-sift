@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(~/.local/bin/claude:*)",
+      "Bash(sudo apt:*)",
+      "Bash(apt-cache search:*)",
+      "Bash(psort.py:*)"
+    ]
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read",
+      "Write(./analysis/*)",
+      "Write(./reports/*)",
+      "Write(./exports/*)",
+
+      "Bash(log2timeline.py *)",
+      "Bash(psort.py *)",
+      "Bash(pinfo.py *)",
+      "Bash(image_export.py *)",
+      "Bash(mactime *)",
+
+      "Bash(fls *)",
+      "Bash(ils *)",
+      "Bash(icat *)",
+      "Bash(istat *)",
+      "Bash(ifind *)",
+      "Bash(ffind *)",
+      "Bash(fsstat *)",
+      "Bash(blkcat *)",
+      "Bash(blkls *)",
+      "Bash(blkstat *)",
+      "Bash(blkcalc *)",
+      "Bash(mmls *)",
+      "Bash(mmstat *)",
+      "Bash(mmcat *)",
+      "Bash(tsk_recover *)",
+      "Bash(sorter *)",
+      "Bash(sigfind *)",
+      "Bash(jls *)",
+      "Bash(jcat *)",
+      "Bash(hfind *)",
+
+      "Bash(ewfmount *)",
+      "Bash(vshadowmount *)",
+      "Bash(bdemount *)",
+      "Bash(xmount *)",
+      "Bash(imagemounter *)",
+      "Bash(mount_ewf.py *)",
+      "Bash(qemu-nbd *)",
+      "Bash(partprobe *)",
+      "Bash(mount *)",
+      "Bash(umount *)",
+      "Bash(losetup *)",
+
+      "Bash(volatility *)",
+      "Bash(vol.py *)",
+      "Bash(vol *)",
+      "Bash(rekall *)",
+
+      "Bash(dotnet *)",
+      "Bash(mftecmd *)",
+      "Bash(evtxecmd *)",
+      "Bash(recmd *)",
+      "Bash(pecmd *)",
+      "Bash(amcacheparser *)",
+      "Bash(appcompatcacheparser *)",
+      "Bash(jlecmd *)",
+      "Bash(lecmd *)",
+      "Bash(sqlecmd *)",
+      "Bash(srumecmd *)",
+      "Bash(vtecmd *)",
+      "Bash(rbcmd *)",
+      "Bash(bstrings *)",
+      "Bash(rip.pl *)",
+      "Bash(regripper *)",
+
+      "Bash(bulk_extractor *)",
+      "Bash(foremost *)",
+      "Bash(photorec *)",
+      "Bash(scalpel *)",
+      "Bash(strings *)",
+      "Bash(floss *)",
+      
+      "Bash(tshark *)",
+      "Bash(tcpdump *)",
+      "Bash(ngrep *)",
+      "Bash(tcpxtract *)",
+
+      "Bash(exiftool *)",
+      "Bash(yara *)",
+      "Bash(clamscan *)",
+      "Bash(hayabusa *)",
+
+      "Bash(md5sum *)",
+      "Bash(sha1sum *)",
+      "Bash(sha256sum *)",
+      "Bash(sha512sum *)",
+      "Bash(ssdeep *)",
+      "Bash(md5deep *)",
+
+      "Bash(echo *)",
+      "Bash(printf *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(find *)",
+      "Bash(file *)",
+      "Bash(stat *)",
+      "Bash(hexdump *)",
+      "Bash(xxd *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(less *)",
+      "Bash(awk *)",
+      "Bash(sed *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(wc *)",
+
+      "Edit(./analysis/*)",
+      "Edit(./reports/*)",
+      "Edit(./exports/*)"
+    ],
+    "defaultMode": "acceptEdits",
+    "ask": [],
+    "deny": [
+      "Read(./secrets/**)",
+      "Read(./**/*.key)",
+      "Read(./**/*.pem)",
+      "Bash(rm -rf:*)",
+      "Bash(dd:*)",
+      "Bash(wget:*)",
+      "Bash(curl:*)",
+      "Bash(ssh:*)",
+      "WebFetch"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mkdir -p ./analysis/ && echo \"$(date -u): $CONVERSATION_SUMMARY\" >> ./analysis/forensic_audit.log"
+          }
+        ]
+      }
+    ]
+  }
+}
