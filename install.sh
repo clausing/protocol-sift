@@ -52,15 +52,22 @@ else
 fi
 echo
 
-# ── clone ────────────────────────────────────────────────────────────────────
+# ── locate repo files ─────────────────────────────────────────────────────────
 
-WORK_DIR="$(mktemp -d -t "${TMPDIR_PREFIX}.XXXXXX")"
-trap 'rm -rf "$WORK_DIR"' EXIT
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-info "Cloning protocol-sift into temp directory…"
-git clone --depth=1 --quiet "$REPO_URL" "$WORK_DIR/repo"
-REPO_DIR="$WORK_DIR/repo"
-ok "Clone complete."
+if [[ -f "$SCRIPT_DIR/global/CLAUDE.md" && -f "$SCRIPT_DIR/global/settings.json" ]]; then
+    info "Running from local repo/archive — skipping clone."
+    REPO_DIR="$SCRIPT_DIR"
+    WORK_DIR=""
+else
+    WORK_DIR="$(mktemp -d -t "${TMPDIR_PREFIX}.XXXXXX")"
+    trap 'rm -rf "$WORK_DIR"' EXIT
+    info "Cloning protocol-sift into temp directory…"
+    git clone --depth=1 --quiet "$REPO_URL" "$WORK_DIR/repo"
+    REPO_DIR="$WORK_DIR/repo"
+    ok "Clone complete."
+fi
 echo
 
 # ── create ~/.claude if missing ───────────────────────────────────────────────
