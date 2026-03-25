@@ -1,5 +1,7 @@
 # Protocol SIFT
 
+Rob Lee developed Protocol SIFT and all the files found within this repository.
+
 ## Claude Code + SANS SIFT Workstation Setup
 
 > [!IMPORTANT]
