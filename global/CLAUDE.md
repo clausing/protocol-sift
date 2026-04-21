@@ -44,6 +44,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **bulk_extractor** | `bulk_extractor` (v2.0.3) | Defaults to 4 threads |
 | **photorec** | `sudo photorec` | File carving by signature |
 | **dotnet runtime** | `/usr/bin/dotnet` (v6.0.36) | Runtime only — `dotnet --version` will error |
+| **blkid** | `sudo blkid -o value -s TYPE --offset $((N*512)) /mnt/ewf/ewf1` | Identify filesystem type at a partition offset before mounting |
+| **kpartx** | `sudo kpartx -av /dev/loopX` | Map LVM partitions from loop device — required before `vgchange` |
+| **vgchange** | `sudo vgchange -ay` / `sudo vgchange -an <vg>` | Activate / deactivate LVM volume groups |
+| **lvs / lvdisplay** | `sudo lvs` | List LVM logical volumes and their device paths |
+| **btrfs** | `sudo btrfs subvolume list /mnt/linux_mount` | List Btrfs subvolumes before selecting mount target |
+| **journalctl** | `journalctl --directory <path> --utc` | Use `--directory` to read offline journal from mounted evidence |
+| **ausearch** | `ausearch -i -f <audit.log>` | Use `-f` for offline audit log; without it reads the live system |
+| **aureport** | `aureport --summary -if <audit.log>` | Use `-if` for offline audit log |
+| **last / lastb** | `last -F -f <wtmp>` / `lastb -F -f <btmp>` | Login and failed-login history from binary logs |
+| **rkhunter** | `sudo rkhunter --check --rootdir /mnt/linux_mount` | Use `--rootdir` for offline mounted image |
+| **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Use `-r` for offline mounted image |
+| **dwarf2json** | `dwarf2json linux --elf <vmlinux>` | Generates Volatility 3 ISF from kernel debug symbols |
+
+> **Linux memory symbols:** Volatility 3 Linux plugins require a per-kernel ISF
+> file — unlike Windows, symbols cannot be auto-downloaded. Generate with
+> `dwarf2json` from the target kernel's debug package, or source pre-built ISFs
+> from https://github.com/Abyss-W4tcher/volatility3-symbols
 
 **Not available on this instance:** MemProcFS, VSCMount (Windows-only).
 
@@ -70,5 +87,6 @@ workbook-update       # update FOR508 workbook
 | Memory forensics (Volatility 3 / Memory Baseliner) | `@~/.claude/skills/memory-analysis/SKILL.md` |
 | Windows artifacts (EZ Tools / Event Logs / Registry) | `@~/.claude/skills/windows-artifacts/SKILL.md` |
 | Threat hunting & IOC sweeps (YARA / Velociraptor) | `@~/.claude/skills/yara-hunting/SKILL.md` |
+| Linux artifacts (logs / persistence / execution) | `@~/.claude/skills/linux-artifacts/SKILL.md` |
 
 EZ Tools prefer native .NET over WINE. GUI tools (TimelineExplorer, RegistryExplorer) require WINE or the Windows analysis VM.

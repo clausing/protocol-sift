@@ -376,3 +376,127 @@ sudo /opt/volatility3-2.20.0/vol.py -f <image.img> windows.psscan
 - `windows.netscan` may show connections from before image capture time — correlate with disk timeline
 - `windows.svcscan` surfaces services configured but not yet loaded, and deleted services still in memory
 - Volatility 3 plugins are `windows.X` format (not `windows.X.X` as in Vol2)
+
+---
+
+## Linux Memory Forensics
+
+### Symbol Requirements
+
+Linux symbols cannot be auto-downloaded the way Windows PDB files are. A per-kernel
+ISF file must be present before any `linux.*` plugin will run. This is the most
+common cause of failure when starting Linux memory analysis.
+
+```bash
+# Check for pre-built ISF files
+ls /opt/volatility3-*/volatility3/symbols/linux/
+
+# Confirm linux.info loads (this is your symbol test)
+python3 /opt/volatility3-2.20.0/vol.py -f <image.lime> linux.info
+
+# If no ISF exists — generate one from the kernel debug package
+# Step 1: determine the exact kernel version from the image
+strings <image.lime> | grep "Linux version" | head -3
+
+# Step 2: install the matching debug package on the SIFT workstation
+sudo apt install linux-image-<exact-kernel-version>-dbg
+
+# Step 3: generate the ISF with dwarf2json
+dwarf2json linux \
+  --elf /usr/lib/debug/boot/vmlinux-<exact-kernel-version> \
+  > /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
+
+# Step 4: compress (Volatility 3 reads .json.xz natively — saves ~10x space)
+xz /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
+
+# Pre-built ISFs for common Ubuntu/Debian/CentOS kernels:
+# https://github.com/Abyss-W4tcher/volatility3-symbols
+```
+
+### Linux Plugin Reference
+
+```bash
+alias vol="python3 /opt/volatility3-2.20.0/vol.py"
+
+# Always run linux.info first — confirms symbols loaded correctly
+vol -f <image.lime> linux.info
+```
+
+| Plugin | Purpose | Windows analogue |
+|--------|---------|-----------------|
+| `linux.pslist` | Process list via task_struct linked list | `windows.pslist` |
+| `linux.psscan` | Pool scan for hidden processes | `windows.psscan` |
+| `linux.pstree` | Parent-child process tree | `windows.pstree` |
+| `linux.psaux` | Process list with full argv | `windows.cmdline` |
+| `linux.envars` | Environment variables per process | `windows.envars` |
+| `linux.bash` | Bash history recovered from memory | (no Windows equivalent) |
+| `linux.lsmod` | Loaded kernel modules (via kobjects) | `windows.modules` |
+| `linux.check_modules` | **Detect hidden LKMs** | `windows.modscan` diff |
+| `linux.check_syscall` | **Detect syscall table hooks** | (no Windows equivalent) |
+| `linux.check_creds` | **Detect uid-0 sharing (privesc)** | (no Windows equivalent) |
+| `linux.tty_check` | Detect TTY hook (keylogger) | (no Windows equivalent) |
+| `linux.netfilter` | Netfilter / iptables hook enumeration | (no Windows equivalent) |
+| `linux.netstat` | Network connections | `windows.netstat` |
+| `linux.lsof` | Open file descriptors per process | `windows.handles` (File) |
+| `linux.elfs` | ELF files mapped in process memory | `windows.dlllist` |
+| `linux.malfind` | Injected / anomalous memory regions | `windows.malfind` |
+| `linux.procmaps` | Process memory maps (/proc/PID/maps) | `windows.vadinfo` |
+| `linux.mountinfo` | Mount points per namespace | — |
+| `linux.pid_namespace` | PID namespaces (container detection) | — |
+| `linux.kmsg` | Kernel message buffer | — |
+
+### Standard Opening Set
+
+```bash
+# Process enumeration — run both, compare
+vol -f <image.lime> linux.pslist > ./analysis/memory/pslist.txt
+vol -f <image.lime> linux.psscan > ./analysis/memory/psscan.txt
+vol -f <image.lime> linux.psaux  > ./analysis/memory/psaux.txt
+
+# Network connections
+vol -f <image.lime> linux.netstat > ./analysis/memory/netstat.txt
+
+# Rootkit checks — run on every Linux case
+vol -f <image.lime> linux.check_syscall > ./analysis/memory/check_syscall.txt
+vol -f <image.lime> linux.check_modules > ./analysis/memory/check_modules.txt
+vol -f <image.lime> linux.check_creds   > ./analysis/memory/check_creds.txt
+vol -f <image.lime> linux.tty_check     > ./analysis/memory/tty_check.txt
+vol -f <image.lime> linux.netfilter     > ./analysis/memory/netfilter.txt
+
+# Bash history from memory (survives even if .bash_history was deleted)
+vol -f <image.lime> linux.bash > ./analysis/memory/bash_history.txt
+
+# Kernel modules — compare lsmod vs check_modules for hidden LKMs
+vol -f <image.lime> linux.lsmod > ./analysis/memory/lsmod.txt
+# Any module in check_modules output NOT in lsmod = hidden LKM rootkit
+
+# Code injection
+vol -f <image.lime> linux.malfind --dump --output-dir ./exports/malfind/
+```
+
+### Linux Six-Step Analysis Methodology
+
+1. **Enumerate processes** — `linux.pslist` + `linux.psscan`; discrepancies = hidden process
+2. **Review process arguments** — `linux.psaux`; look for reverse shells, encoded payloads,
+   shells spawned from web servers (nginx/apache parent = webshell execution)
+3. **Check network connections** — `linux.netstat`; extract unique external IPs
+4. **Rootkit indicators** — `linux.check_syscall` (hook rootkits), `linux.check_modules`
+   (hidden LKMs), `linux.check_creds` (uid-0 sharing = privesc), `linux.tty_check`
+   (keylogger), `linux.netfilter` (firewall manipulation)
+5. **Bash history from memory** — `linux.bash`; often the best execution evidence
+   when auditd was not running and .bash_history was cleared
+6. **Injected code** — `linux.malfind`; dump and triage hits
+
+### Linux Process Anomaly Indicators
+
+| Anomaly | What to Look For |
+|---------|-----------------|
+| PID 1 wrong | Should be `systemd` or `init`; anything else is critical |
+| Kernel thread masquerade | Kernel threads appear in `[brackets]`; user proc in brackets = hiding |
+| Orphaned process | PPID points to non-existent PID |
+| Shell from web server | `bash`/`sh` child of `nginx`, `apache2`, `php-fpm` = webshell execution |
+| Unexpected interpreter | `python`, `perl`, `ruby` running as long-lived standalone process |
+| uid-0 sharing | `linux.check_creds` finds processes sharing root credentials = privesc |
+| Modified syscall table | `linux.check_syscall` shows non-kernel addresses = hook rootkit |
+| Hidden kernel module | In `linux.check_modules` but absent from `linux.lsmod` = LKM rootkit |
+| High privilege shell | Unexpected root shell process not descended from a login service |

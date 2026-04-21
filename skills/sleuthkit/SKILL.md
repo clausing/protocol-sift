@@ -5,6 +5,16 @@ Use this skill for disk image analysis, filesystem navigation, file extraction, 
 file carving on the SIFT workstation. Evidence images are commonly in E01 (Expert Witness
 Format). Always mount read-only to preserve evidence integrity.
 
+> **TSK filesystem support:** The Sleuth Kit tools (`fls`, `icat`, `fsstat`, `mactime`,
+> `ils`, `blkls`) support **ext2/3/4**, NTFS, FAT, exFAT, and HFS+ only.
+> They **cannot** read XFS, Btrfs, or LVM logical volumes.
+>
+> For Linux evidence on XFS, Btrfs, or LVM:
+> - `ewfmount`, `mmls`, `ewfinfo`, `ewfverify`, `bulk_extractor`, and file carving still work
+> - Mount the image and work from `/mnt/linux_mount/` using native Linux tools and Plaso
+> - See the **LVM Activation** and **XFS / Btrfs** sections below for mount workflows
+> - See `@~/.claude/skills/linux-artifacts/SKILL.md` for artifact extraction from the mounted path
+
 ---
 
 ## Tool Reference
@@ -78,7 +88,7 @@ img_stat /mnt/ewf/ewf1
 
 ```bash
 sudo mmls /mnt/ewf/ewf1
-# Note the Start sector and sector size for the target partition (usually the largest NTFS)
+# Note the Start sector and sector size for the target partition
 ```
 
 Example output (512-byte sectors):
@@ -91,6 +101,17 @@ Example output (512-byte sectors):
 ```
 
 **GPT disks:** `mmls` handles GPT automatically — look for partition type GUIDs.
+
+**LVM detection:** If `mmls` shows a partition type of `Linux LVM` (MBR type `0x8e`)
+or GPT GUID `E6D6D379-F507-44C2-A23C-238F2A3DF928`, do not proceed to Step 5 below —
+go to **LVM Activation** instead. Mounting an LVM PV directly will fail.
+
+```bash
+# Identify filesystem type without mounting (works for non-LVM partitions)
+OFFSET=$(sudo mmls /mnt/ewf/ewf1 | awk '/Linux filesystem|Linux LVM/{print $3; exit}')
+sudo blkid -o value -s TYPE --offset $((OFFSET * 512)) /mnt/ewf/ewf1
+# Output will be: ext4, xfs, btrfs, LVM2_member, etc.
+```
 
 ### 5. Mount Filesystem (Read-Only)
 
@@ -106,21 +127,98 @@ ls /mnt/windows_mount/
 
 **If mount fails (filesystem dirty / hibernation):**
 ```bash
-# Add norecovery for NTFS (no journal replay — preserves evidence state)
+# NTFS: add norecovery (prevents journal replay — preserves evidence state)
 sudo mount -o ro,loop,norecovery,offset=${OFFSET} /mnt/ewf/ewf1 /mnt/windows_mount
+
+# ext4: dirty journal — add noload
+sudo mount -o ro,loop,noload,offset=${OFFSET} /mnt/ewf/ewf1 /mnt/linux_mount
+```
+
+---
+
+### LVM Activation (when partition type is Linux LVM)
+
+TSK cannot read inside LVM. Use `kpartx` to surface logical volumes, then mount them.
+
+```bash
+# Step 1: Set up a loop device on the EWF raw image
+sudo losetup -f --show /mnt/ewf/ewf1
+# Note the loop device name, e.g., /dev/loop0
+
+# Step 2: Map all partitions from the loop device
+sudo kpartx -av /dev/loop0
+# Creates /dev/mapper/loop0p1, /dev/mapper/loop0p2, etc.
+
+# Step 3: Scan for LVM volume groups
+sudo pvscan          # confirm physical volume(s) are recognised
+sudo vgscan          # discover volume group names
+
+# Step 4: Activate volume group(s) read-only where possible
+# Note: -ay is required to surface logical volumes; -an deactivates
+sudo vgchange -ay
+
+# Step 5: List logical volumes
+sudo lvs             # summary: LV name, VG name, size
+sudo lvdisplay       # full details including device path
+
+# Step 6: Mount the logical volume of interest (read-only)
+sudo mkdir -p /mnt/linux_mount
+sudo mount -o ro /dev/vgname/lvname /mnt/linux_mount
+
+# For XFS logical volumes:
+sudo mount -o ro,norecovery /dev/vgname/lvname /mnt/linux_mount
+
+# Cleanup (reverse order)
+sudo umount /mnt/linux_mount
+sudo vgchange -an vgname     # deactivate volume group
+sudo kpartx -dv /dev/loop0
+sudo losetup -d /dev/loop0
+sudo umount /mnt/ewf
+```
+
+Common logical volume names: `root`, `home`, `var`, `swap`.
+The device path is `/dev/<vgname>/<lvname>` or equivalently `/dev/mapper/<vgname>-<lvname>`.
+
+---
+
+### Btrfs Subvolumes
+
+Btrfs uses subvolumes — a naive `mount` often lands in the top-level subvolume
+rather than the actual root filesystem. The root OS is usually in subvolume `@`.
+
+```bash
+# Mount at the top level first to list subvolumes
+sudo mount -o ro /dev/... /mnt/linux_mount
+sudo btrfs subvolume list /mnt/linux_mount
+
+# Example output:
+# ID 256 gen 45 top level 5 path @
+# ID 257 gen 44 top level 5 path @home
+
+# Remount to the correct subvolume (usually @)
+sudo umount /mnt/linux_mount
+sudo mount -o ro,subvol=@ /dev/... /mnt/linux_mount
 ```
 
 ### 6. Filesystem Metadata
 
 ```bash
 # Filesystem statistics (NTFS version, cluster size, MFT offset, volume ID)
+# ext2/3/4 and NTFS only — fails on XFS and Btrfs
 sudo fsstat /mnt/ewf/ewf1
 
 # With partition offset (if fsstat is run against the raw image directly)
 sudo fsstat -o 2048 /mnt/ewf/ewf1
+
+# For XFS / Btrfs: check filesystem type and basic stats from the mounted path
+df -Th /mnt/linux_mount
 ```
 
 ### 7. Filesystem Navigation with TSK
+
+> **ext2/3/4 only.** `fls`, `icat`, `ils`, `blkls`, `mactime` cannot read XFS or Btrfs.
+> For those filesystems, navigate from the mounted path using standard Linux tools
+> and generate the filesystem timeline with the `find`-based method in Step 11.
 
 ```bash
 # List all files recursively (includes deleted entries — marked with *)
@@ -227,28 +325,71 @@ sudo tsk_recover -d <dir_inode> /mnt/ewf/ewf1 ./exports/tsk_recover_subdir/
 
 ### 11. Generate Filesystem Timeline
 
+#### Method A — TSK (ext2/3/4 only)
+
 ```bash
-# Step 1: Create bodyfile
+# Step 1: Create bodyfile via fls
 sudo fls -r -m / /mnt/ewf/ewf1 > ./analysis/bodyfile.txt
 
-# Step 2: Convert to sorted timeline (UTC, default tab-separated)
-mactime -b ./analysis/bodyfile.txt -z UTC > ./exports/fs_timeline.txt
-
-# Step 2 (alt): CSV output (easier to open in Timeline Explorer)
+# Step 2: Convert to sorted timeline (UTC)
 mactime -b ./analysis/bodyfile.txt -z UTC -d > ./exports/fs_timeline.csv
 
-# Step 2 (alt): ISO 8601 timestamps (sortable, unambiguous)
+# Step 2 (alt): ISO 8601 timestamps
 mactime -b ./analysis/bodyfile.txt -z UTC -y > ./exports/fs_timeline_iso.txt
 
 # Step 3 (optional): Filter by date range
-mactime -b ./analysis/bodyfile.txt -z UTC -d 2023-01-01 2023-12-31 > ./exports/fs_timeline_filtered.txt
-
-# Step 4 (optional): Generate hourly/daily index for large timelines
-mactime -b ./analysis/bodyfile.txt -z UTC -i hour ./analysis/timeline_index.txt > ./exports/fs_timeline.txt
-
-# Step 5 (optional): Export as bodyfile for use with log2timeline
-# The bodyfile.txt IS the output — pass directly to log2timeline.py as a source
+mactime -b ./analysis/bodyfile.txt -z UTC -d 2023-01-01 2023-12-31 \
+  > ./exports/fs_timeline_filtered.txt
 ```
+
+#### Method B — find + mactime (XFS / Btrfs / any mounted filesystem)
+
+When the filesystem is XFS, Btrfs, or any other type TSK cannot navigate, generate
+the bodyfile from the **mounted path** using `find`. The output format is compatible
+with `mactime`.
+
+```bash
+# Step 1: Generate bodyfile from mounted path
+# Format: MD5|path|inode|mode|uid|gid|size|atime|mtime|ctime|crtime
+sudo find /mnt/linux_mount -xdev -printf \
+  "0|%p|%i|%M|%U|%G|%s|%A@|%T@|%C@|0\n" 2>/dev/null \
+  > ./analysis/bodyfile.txt
+
+# Step 2: Convert to timeline with mactime (same as Method A)
+mactime -b ./analysis/bodyfile.txt -z UTC -d > ./exports/fs_timeline.csv
+```
+
+`find -printf` field mapping:
+| Specifier | Description |
+|-----------|-------------|
+| `%p` | Full path |
+| `%i` | Inode number |
+| `%M` | Permission string (e.g., `-rwxr-xr-x`) |
+| `%U` / `%G` | Username / group name |
+| `%s` | File size in bytes |
+| `%A@` | Last access time (Unix epoch) |
+| `%T@` | Last modification time (Unix epoch) |
+| `%C@` | Last status change time (Unix epoch) |
+
+Note: Linux (ext4, XFS, Btrfs) does not reliably expose creation time (`crtime`).
+The final `0` is a placeholder — `mactime` ignores it in most output modes.
+
+#### Method C — Plaso (all filesystems, recommended for Linux IR)
+
+Plaso's `linux` parser extracts filesystem MAC times directly from the mounted
+filesystem, supporting ext4, XFS, Btrfs, and any other mountable filesystem.
+Always use the mounted path (`/mnt/linux_mount/`), never the raw image, for
+non-ext4 Linux evidence.
+
+```bash
+log2timeline.py \
+  --storage-file ./analysis/<CASE_ID>_linux.plaso \
+  --parsers linux \
+  --timezone UTC \
+  /mnt/linux_mount/
+```
+
+See `@~/.claude/skills/plaso-timeline/SKILL.md` for full Plaso workflow.
 
 **mactime flags:**
 | Flag | Description |
@@ -316,6 +457,83 @@ sudo cp -r /mnt/windows_mount/Windows/System32/Tasks/ ./exports/tasks/
 sudo find /mnt/windows_mount/Users/ -name "PowerShell_transcript*.txt" \
   -exec cp --parents {} ./exports/pslogs/ \;
 ```
+
+### Linux Targeted Artifact Extraction
+
+When the evidence is a Linux disk image, extract these artifacts instead of
+(or in addition to) the Windows artifacts above.
+
+```bash
+# /etc — accounts, SSH config, sudoers, cron, systemd, PAM
+sudo mkdir -p ./exports/etc/
+sudo cp -rp /mnt/linux_mount/etc/passwd \
+            /mnt/linux_mount/etc/shadow \
+            /mnt/linux_mount/etc/group \
+            /mnt/linux_mount/etc/sudoers \
+            /mnt/linux_mount/etc/ssh/ \
+            ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/sudoers.d  ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/ld.so.preload ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/crontab    ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/cron.d     ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/systemd    ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/profile.d  ./exports/etc/ 2>/dev/null
+
+# Logs (full /var/log)
+sudo mkdir -p ./exports/logs/
+sudo cp -rp /mnt/linux_mount/var/log ./exports/logs/
+
+# Systemd journal (binary format — read with journalctl --directory)
+sudo mkdir -p ./exports/journal/
+sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
+  -exec cp --parents {} ./exports/journal/ \; 2>/dev/null
+
+# Audit log
+sudo mkdir -p ./exports/audit/
+sudo cp -p /mnt/linux_mount/var/log/audit/audit.log ./exports/audit/ 2>/dev/null
+
+# Shell histories (all users)
+sudo mkdir -p ./exports/shell_history/
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  \( -name ".bash_history" -o -name ".zsh_history" \) \
+  -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
+
+# Per-user crontabs
+sudo mkdir -p ./exports/cron/
+sudo cp -rp /mnt/linux_mount/var/spool/cron ./exports/cron/spool/ 2>/dev/null
+
+# SSH authorized_keys (all users)
+sudo mkdir -p ./exports/ssh_keys/
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name "authorized_keys" \
+  -exec cp --parents {} ./exports/ssh_keys/ \; 2>/dev/null
+
+# Staging areas (attacker drop zones)
+sudo mkdir -p ./exports/staging/
+sudo find /mnt/linux_mount/tmp \
+          /mnt/linux_mount/var/tmp \
+          /mnt/linux_mount/dev/shm \
+  -type f 2>/dev/null \
+  -exec cp --parents {} ./exports/staging/ \; 2>/dev/null
+
+# Web root (webshell hunting)
+sudo mkdir -p ./exports/webroot/
+sudo cp -rp /mnt/linux_mount/var/www ./exports/webroot/ 2>/dev/null
+
+# Installed package snapshot
+dpkg --root=/mnt/linux_mount -l \
+  > ./exports/installed_packages_dpkg.txt 2>/dev/null
+rpm --root=/mnt/linux_mount -qa \
+  > ./exports/installed_packages_rpm.txt 2>/dev/null
+```
+
+**ext4 / Linux filesystem notes:**
+- TSK tools (`fls`, `icat`, `mactime`, etc.) support **ext2/3/4 only** for Linux filesystems
+- Root directory inode on ext4 is **inode 2** (not inode 5 as on NTFS)
+- `norecovery` is NTFS-specific; for ext4 use `noload`; for XFS/Btrfs use `-o ro` alone
+- For XFS or Btrfs evidence: skip TSK filesystem navigation entirely — use Method B or C above
+- For LVM evidence: activate with `kpartx` + `vgchange -ay` before mounting (see LVM section)
+- For Btrfs: list subvolumes after initial mount and remount with `-o ro,subvol=@` if needed
 
 ---
 

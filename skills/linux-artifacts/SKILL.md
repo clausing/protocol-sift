@@ -1,0 +1,854 @@
+# Skill: Linux Artifacts (Logs / Persistence / Execution / Rootkits)
+
+## Overview
+Use this skill for Linux host-based artifact analysis on the SIFT workstation.
+Covers authentication logs, systemd journal, auditd, shell history, persistence
+mechanisms, rootkit indicators, and artifact extraction from Linux disk images.
+
+> **Evidence mount assumption:** Commands below use `/mnt/linux_mount` as the
+> read-only mount point for the target Linux filesystem. See
+> `@~/.claude/skills/sleuthkit/SKILL.md` for mount procedures.
+
+---
+
+## Filesystem Type Detection
+
+Before extracting artifacts, identify the filesystem type — it determines whether TSK
+tools are available and whether LVM activation or Btrfs subvolume handling is needed.
+
+```bash
+# After ewfmount — identify filesystem / volume type at the partition level
+sudo mmls /mnt/ewf/ewf1
+
+# Probe a specific partition offset for its filesystem type
+OFFSET=$(sudo mmls /mnt/ewf/ewf1 | awk '/Linux/{print $3; exit}')
+sudo blkid -o value -s TYPE --offset $((OFFSET * 512)) /mnt/ewf/ewf1
+# Returns: ext4, xfs, btrfs, LVM2_member, etc.
+
+# After mounting — confirm from the mounted path
+df -Th /mnt/linux_mount
+```
+
+**Decision table:**
+
+| Result | Action |
+|--------|--------|
+| `ext4` / `ext3` | Standard mount (`-o ro,loop,offset=...`); TSK tools available |
+| `xfs` | Standard mount; **no TSK filesystem tools** — use mounted path + find/Plaso |
+| `btrfs` | Mount, list subvolumes, remount with `-o ro,subvol=@`; **no TSK tools** |
+| `LVM2_member` | LVM activation required — see `@~/.claude/skills/sleuthkit/SKILL.md` |
+
+For XFS and Btrfs, all artifact extraction commands in this skill file work as-is
+because they target `/mnt/linux_mount/` paths. Only TSK-based filesystem navigation
+(`fls`, `icat`, `mactime` via bodyfile) is unavailable.
+
+---
+
+## Distro Quick Reference
+
+| Artifact | Debian / Ubuntu | RHEL / CentOS / Fedora |
+|----------|----------------|----------------------|
+| Auth log | `/var/log/auth.log` | `/var/log/secure` |
+| System log | `/var/log/syslog` | `/var/log/messages` |
+| Kernel log | `/var/log/kern.log` | included in `messages` |
+| Cron log | `/var/log/cron.log` | `/var/log/cron` |
+| Package log | `/var/log/dpkg.log` | `/var/log/yum.log` / `/var/log/dnf.log` |
+| User crontabs | `/var/spool/cron/crontabs/<user>` | `/var/spool/cron/<user>` |
+| Package query | `dpkg -l` / `dpkg -V` | `rpm -qa` / `rpm -Va` |
+
+---
+
+## Tool Reference
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `journalctl` | Read systemd journal (incl. offline) | Use `--file` or `--directory` for mounted evidence |
+| `ausearch` | Search auditd logs | Use `-f` for offline log file |
+| `aureport` | Summarize auditd logs | Use `-if` for offline log file |
+| `last` | Login history from wtmp | Use `-F -f <path>` for full timestamps + offline file |
+| `lastb` | Failed login history from btmp | Use `-F -f <path>` for full timestamps + offline file |
+| `rkhunter` | Rootkit detection scan | Use `--rootdir` for mounted image |
+| `chkrootkit` | Rootkit detection scan | Use `-r` for mounted image |
+| `find` | File system searches | Core tool for recent files, SUID, staging |
+| `stat` | File metadata (MAC times, inode) | — |
+
+---
+
+## User Account Analysis
+
+```bash
+# All accounts — look for UID 0 duplicates and unexpected shell accounts
+cat /mnt/linux_mount/etc/passwd
+
+# Accounts with UID 0 (should be root only)
+awk -F: '$3 == 0 {print $1}' /mnt/linux_mount/etc/passwd
+
+# Accounts with a valid login shell (non-service accounts)
+awk -F: '$7 !~ /(nologin|false|sync|halt|shutdown)/ {print $1, $3, $7}' \
+  /mnt/linux_mount/etc/passwd
+
+# File modification time on passwd/shadow (reveals when accounts were added)
+stat /mnt/linux_mount/etc/passwd /mnt/linux_mount/etc/shadow
+
+# Group memberships — check sudo / wheel / adm / docker membership
+cat /mnt/linux_mount/etc/group
+grep -E "^(sudo|wheel|adm|docker):" /mnt/linux_mount/etc/group
+
+# Sudoers — ALL / NOPASSWD grants are high priority
+cat /mnt/linux_mount/etc/sudoers 2>/dev/null
+grep -rE "(ALL|NOPASSWD)" \
+  /mnt/linux_mount/etc/sudoers \
+  /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null
+
+# SSH authorized_keys — backdoor key implantation
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name "authorized_keys" 2>/dev/null | \
+  while IFS= read -r f; do
+    echo "=== $f ==="
+    cat "$f"
+  done | tee ./exports/authorized_keys_all.txt
+
+# SSH host key fingerprints (verify against expected baseline)
+for key in /mnt/linux_mount/etc/ssh/ssh_host_*_key.pub; do
+  ssh-keygen -lf "$key" 2>/dev/null
+done
+```
+
+---
+
+## Authentication Log Analysis
+
+```bash
+# All successful SSH logins (source IP + user + timestamp)
+grep "Accepted" /mnt/linux_mount/var/log/auth.log 2>/dev/null || \
+grep "Accepted" /mnt/linux_mount/var/log/secure   2>/dev/null | \
+  tee ./exports/ssh_logins_success.txt
+
+# Top source IPs for successful SSH logins (anomaly pivot)
+awk '{print $11}' ./exports/ssh_logins_success.txt | \
+  sort | uniq -c | sort -rn | head -20
+
+# Failed SSH logins (brute force / credential stuffing)
+grep "Failed password" /mnt/linux_mount/var/log/auth.log 2>/dev/null || \
+grep "Failed password" /mnt/linux_mount/var/log/secure   2>/dev/null | \
+  tee ./exports/ssh_logins_failed.txt
+
+# Invalid user attempts (probing non-existent accounts)
+grep "Invalid user" /mnt/linux_mount/var/log/auth.log 2>/dev/null
+
+# Sudo usage with full command
+grep "sudo:" /mnt/linux_mount/var/log/auth.log 2>/dev/null | \
+  grep "COMMAND" | tee ./exports/sudo_usage.txt
+
+# su to root
+grep "session opened for user root" /mnt/linux_mount/var/log/auth.log 2>/dev/null
+
+# New user / group creation
+grep -E "(useradd|groupadd|usermod|passwd:)" \
+  /mnt/linux_mount/var/log/auth.log 2>/dev/null
+
+# Login history from wtmp (all logins / logouts with duration)
+last -F -f /mnt/linux_mount/var/log/wtmp | tee ./exports/wtmp_logins.txt
+
+# Failed login history from btmp
+lastb -F -f /mnt/linux_mount/var/log/btmp 2>/dev/null | \
+  tee ./exports/btmp_failed.txt
+
+# Last login per account
+lastlog --root /mnt/linux_mount 2>/dev/null | tee ./exports/lastlog.txt
+```
+
+---
+
+## Systemd Journal (journalctl)
+
+Reading an offline journal requires `--file` or `--directory` — the most common
+operational mistake is forgetting this and reading the live system's journal instead.
+
+```bash
+# Find the machine-id (required to locate journal directory)
+cat /mnt/linux_mount/etc/machine-id
+
+# List journal files on the evidence
+find /mnt/linux_mount/var/log/journal -name "*.journal" 2>/dev/null
+
+# Read offline journal — all events in a time window (UTC)
+MACHINE_ID=$(cat /mnt/linux_mount/etc/machine-id)
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  --since "2023-01-24 00:00:00" --until "2023-01-26 23:59:59" \
+  --utc --no-pager | tee ./exports/journal_window.txt
+
+# Filter by service unit
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  -u sshd --utc --no-pager
+
+# Filter by executable path
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  _EXE=/usr/sbin/sshd --utc --no-pager
+
+# Sudo commands only
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  _COMM=sudo --utc --no-pager
+
+# Kernel messages (module loading, panics, oops)
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  -k --utc --no-pager | tee ./exports/journal_kernel.txt
+
+# All errors and above
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  -p err --utc --no-pager
+
+# Events from a specific PID
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  _PID=<pid> --utc --no-pager
+
+# Export to JSON for scripted analysis
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  --since "2023-01-24" --utc -o json \
+  > ./exports/journal_export.json
+```
+
+**High-value journal filters for IR:**
+| Filter | Purpose |
+|--------|---------|
+| `-u sshd` | SSH logins, key auth, failures |
+| `-u cron` | Scheduled task execution |
+| `_COMM=sudo` | All sudo invocations |
+| `-k` | Kernel: module loads, panics, hardware |
+| `-p err` | All error-level and above events |
+| `_SYSTEMD_UNIT=<name>.service` | Specific service events |
+
+---
+
+## System Logs
+
+```bash
+# Syslog / messages — general system activity
+cat /mnt/linux_mount/var/log/syslog 2>/dev/null || \
+cat /mnt/linux_mount/var/log/messages 2>/dev/null | \
+  tee ./exports/syslog_raw.txt
+
+# Kernel log — module loading visible here (rootkit installation indicator)
+cat /mnt/linux_mount/var/log/kern.log 2>/dev/null | \
+  tee ./exports/kern_log.txt
+
+grep -iE "(module|insmod|rmmod|modprobe)" ./exports/kern_log.txt
+
+# Cron execution log
+cat /mnt/linux_mount/var/log/cron.log 2>/dev/null || \
+cat /mnt/linux_mount/var/log/cron     2>/dev/null | \
+  tee ./exports/cron_log.txt
+
+# Package manager log — what was installed / removed and when
+# Debian/Ubuntu:
+grep " install \| remove " /mnt/linux_mount/var/log/dpkg.log 2>/dev/null | \
+  tee ./exports/dpkg_changes.txt
+
+# RHEL (yum):
+cat /mnt/linux_mount/var/log/yum.log 2>/dev/null | tee ./exports/yum_log.txt
+
+# RHEL (dnf):
+grep "Installed\|Removed" /mnt/linux_mount/var/log/dnf.log 2>/dev/null | \
+  tee ./exports/dnf_changes.txt
+```
+
+---
+
+## Auditd Analysis
+
+Auditd provides syscall-level auditing. It must have been running and configured with
+execve rules to capture command execution. Verify before relying on it.
+
+```bash
+# Confirm auditd was configured and check its rules
+cat /mnt/linux_mount/etc/audit/auditd.conf 2>/dev/null
+cat /mnt/linux_mount/etc/audit/rules.d/*.rules 2>/dev/null
+
+# Confirm execve auditing was enabled (required to capture command execution)
+grep "execve" /mnt/linux_mount/etc/audit/rules.d/*.rules 2>/dev/null
+
+# All execution events
+ausearch -i -sc execve \
+  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null | \
+  tee ./exports/audit_execve.txt
+
+# Specific user's activity by UID
+ausearch -i -ua <uid> \
+  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+
+# Failed authentications
+ausearch -i -m USER_AUTH -sv no \
+  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+
+# Outbound network connections (connect syscall)
+ausearch -i -sc connect \
+  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null | \
+  tee ./exports/audit_network.txt
+
+# Sudo / privilege escalation commands
+ausearch -i -m USER_CMD \
+  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+
+# Summary reports
+aureport --summary  -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+aureport -au --summary -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+aureport -x  --summary -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+aureport --anomaly  -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+
+# PROCTITLE is hex-encoded — decode it to readable command lines
+ausearch -m EXECVE \
+  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null | \
+  grep "proctitle=" | python3 -c "
+import sys
+for line in sys.stdin:
+    for field in line.strip().split():
+        if field.startswith('proctitle='):
+            val = field.split('=', 1)[1]
+            try:
+                print(bytes.fromhex(val).decode('utf-8', errors='replace'))
+            except ValueError:
+                print(val)
+"
+```
+
+**Key auditd record types:**
+| Type | Description |
+|------|-------------|
+| `EXECVE` | Command execution with argv |
+| `SYSCALL` | System call with process context |
+| `PATH` | File access path |
+| `SOCKADDR` | Network connection destination |
+| `USER_AUTH` | Authentication event |
+| `USER_LOGIN` | Login event |
+| `USER_CMD` | sudo command |
+| `PROCTITLE` | Full command line (hex-encoded) |
+| `USER_START` | Session opened |
+| `USER_END` | Session closed |
+| `ANOM_ABEND` | Abnormal process termination |
+
+---
+
+## Shell History
+
+```bash
+# Bash history for all users
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name ".bash_history" 2>/dev/null | \
+  while IFS= read -r f; do
+    echo "=== $f ==="
+    cat "$f"
+  done | tee ./exports/bash_history_all.txt
+
+# Zsh history
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name ".zsh_history" 2>/dev/null | \
+  while IFS= read -r f; do
+    echo "=== $f ==="
+    cat "$f"
+  done | tee ./exports/zsh_history_all.txt
+
+# Fish shell history (stores timestamps per command in YAML format)
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -path "*/fish/fish_history" 2>/dev/null
+
+# Red flags: downloaders, encoders, reverse shells
+grep -iE \
+  "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |bash -i|python.*-c|perl.*-e|mkfifo)" \
+  ./exports/bash_history_all.txt | tee ./exports/bash_history_suspicious.txt
+
+# HISTFILE tampering — attacker may disable history recording
+grep -rE "(HISTSIZE=0|HISTFILESIZE=0|HISTFILE=/dev/null)" \
+  /mnt/linux_mount/home/*/.bashrc \
+  /mnt/linux_mount/home/*/.bash_profile \
+  /mnt/linux_mount/root/.bashrc \
+  /mnt/linux_mount/root/.bash_profile 2>/dev/null
+
+# Bash history with timestamps — only present if HISTTIMEFORMAT was set
+# Lines starting with #<epoch> are timestamps for the next command
+grep -A1 "^#[0-9]\{10\}" ./exports/bash_history_all.txt | \
+  awk '/^#/{t=strftime("%Y-%m-%d %H:%M:%S UTC", substr($0,2))} !/^#/{print t, $0}'
+```
+
+---
+
+## Persistence Mechanisms
+
+### Cron
+
+```bash
+# System-wide crontab
+cat /mnt/linux_mount/etc/crontab
+
+# Cron drop-in directories
+cat /mnt/linux_mount/etc/cron.d/* 2>/dev/null
+ls -la /mnt/linux_mount/etc/cron.{hourly,daily,weekly,monthly}/ 2>/dev/null
+
+# Per-user crontabs
+for f in /mnt/linux_mount/var/spool/cron/crontabs/* \
+          /mnt/linux_mount/var/spool/cron/*; do
+  [[ -f "$f" ]] && echo "=== $(basename "$f") ===" && cat "$f"
+done
+
+# Red flags: cron running from staging areas or using encoders/downloaders
+grep -rE "(/tmp/|/dev/shm|base64|wget|curl|python|perl|bash -i)" \
+  /mnt/linux_mount/etc/crontab \
+  /mnt/linux_mount/etc/cron.d/ \
+  /mnt/linux_mount/var/spool/cron/ 2>/dev/null
+```
+
+### Systemd Services and Timers
+
+```bash
+# System-wide service units
+ls -la /mnt/linux_mount/etc/systemd/system/*.service 2>/dev/null | \
+  tee ./exports/systemd_services.txt
+
+# Timer units (scheduled task equivalent)
+ls -la /mnt/linux_mount/etc/systemd/system/*.timer 2>/dev/null
+
+# User-level units (run without root)
+find /mnt/linux_mount/home -path "*/.config/systemd/user/*.service" 2>/dev/null
+
+# Units enabled at boot (symlinked into wants directories)
+ls -la /mnt/linux_mount/etc/systemd/system/multi-user.target.wants/ 2>/dev/null
+
+# Inspect a unit file
+cat /mnt/linux_mount/etc/systemd/system/<unit>.service
+
+# Red flags: ExecStart from staging areas or using interpreters
+grep -rE "ExecStart=.*(\/tmp\/|\/dev\/shm\/|base64|bash -i|python|perl|curl|wget)" \
+  /mnt/linux_mount/etc/systemd/system/ 2>/dev/null | \
+  tee ./exports/systemd_suspicious.txt
+```
+
+### LD_PRELOAD / ld.so.preload
+
+**Critical: if `/etc/ld.so.preload` exists and is non-empty, every process on the
+system loaded that library. Treat as confirmed rootkit until proven otherwise.**
+
+```bash
+# Check ld.so.preload (CRITICAL — check this first)
+if [[ -s /mnt/linux_mount/etc/ld.so.preload ]]; then
+    echo "[CRITICAL] /etc/ld.so.preload is non-empty:"
+    cat /mnt/linux_mount/etc/ld.so.preload
+else
+    echo "[OK] /etc/ld.so.preload absent or empty"
+fi
+
+# Dynamic linker library search path configuration
+cat /mnt/linux_mount/etc/ld.so.conf
+cat /mnt/linux_mount/etc/ld.so.conf.d/*.conf 2>/dev/null
+
+# Shared libraries newer than /etc/passwd (recently added)
+find /mnt/linux_mount/usr/lib \
+     /mnt/linux_mount/usr/local/lib \
+     /mnt/linux_mount/lib \
+     /mnt/linux_mount/lib64 \
+  -name "*.so*" -newer /mnt/linux_mount/etc/passwd 2>/dev/null | \
+  tee ./exports/new_shared_libs.txt
+```
+
+### Kernel Module Loading
+
+```bash
+# Modules loaded at boot
+cat /mnt/linux_mount/etc/modules 2>/dev/null
+cat /mnt/linux_mount/etc/modules-load.d/*.conf 2>/dev/null
+
+# Module options and aliases — install directives run arbitrary commands
+cat /mnt/linux_mount/etc/modprobe.d/*.conf 2>/dev/null
+
+# Flag install directives (runs a command whenever the module is loaded)
+grep -r "^install" /mnt/linux_mount/etc/modprobe.d/ 2>/dev/null
+
+# All .ko files on disk (for YARA scanning / hash verification)
+find /mnt/linux_mount/lib/modules -name "*.ko" 2>/dev/null | \
+  sort > ./analysis/kernel_modules_on_disk.txt
+```
+
+### Shell RC Files
+
+Executed on every interactive shell start — a common and often-overlooked
+persistence location.
+
+```bash
+# System-wide shell configuration
+cat /mnt/linux_mount/etc/profile
+cat /mnt/linux_mount/etc/profile.d/*.sh 2>/dev/null
+cat /mnt/linux_mount/etc/bash.bashrc 2>/dev/null
+
+# Per-user RC files
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+    for rc in .bashrc .bash_profile .profile .zshrc .zprofile; do
+        f="${user_home}/${rc}"
+        [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+    done
+done | tee ./exports/shell_rc_all.txt
+
+# Red flags
+grep -iE "(curl|wget|base64|/dev/tcp|nc |ncat |python.*-c)" \
+  ./exports/shell_rc_all.txt
+```
+
+### SSH Authorized Keys
+
+```bash
+# All authorized_keys — fingerprint each key for pivot
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name "authorized_keys" 2>/dev/null | \
+  while IFS= read -r keyfile; do
+    echo "=== $keyfile ==="
+    cat "$keyfile"
+    echo "--- fingerprints ---"
+    while IFS= read -r keyline; do
+        echo "$keyline" | ssh-keygen -l -f /dev/stdin 2>/dev/null
+    done < "$keyfile"
+    echo
+  done | tee ./exports/authorized_keys_fingerprinted.txt
+```
+
+### SUID / SGID Binaries
+
+```bash
+# All SUID binaries (execute as file owner — typically root)
+find /mnt/linux_mount -xdev -perm -4000 -type f 2>/dev/null | \
+  sort > ./exports/suid_binaries.txt
+
+# All SGID binaries
+find /mnt/linux_mount -xdev -perm -2000 -type f 2>/dev/null | \
+  sort > ./exports/sgid_binaries.txt
+
+# Flag SUID binaries outside standard system directories (suspicious additions)
+grep -v "^\(/mnt/linux_mount\)\?\(/usr\)\?\(/s\?bin\|/lib\)" \
+  ./exports/suid_binaries.txt
+```
+
+### Other Persistence Locations
+
+```bash
+# AT jobs (run-once scheduled commands)
+ls /mnt/linux_mount/var/spool/at/ 2>/dev/null
+ls /mnt/linux_mount/var/spool/atjobs/ 2>/dev/null
+
+# MOTD scripts (execute as root on every interactive login)
+ls -la /mnt/linux_mount/etc/update-motd.d/ 2>/dev/null
+cat /mnt/linux_mount/etc/update-motd.d/* 2>/dev/null
+
+# Udev rules with RUN directives (triggered by hardware events)
+grep -r "^RUN" /mnt/linux_mount/etc/udev/rules.d/ 2>/dev/null
+
+# XDG autostart (graphical sessions)
+ls /mnt/linux_mount/etc/xdg/autostart/ 2>/dev/null
+find /mnt/linux_mount/home -path "*/.config/autostart/*.desktop" 2>/dev/null
+
+# PAM module backdoors (hooks all authentication)
+ls /mnt/linux_mount/etc/pam.d/
+# Non-standard PAM modules are unusual — flag any outside /lib/security/
+grep -rh "pam_" /mnt/linux_mount/etc/pam.d/ | \
+  grep -v "^#" | awk '{print $3}' | sort -u
+```
+
+---
+
+## Execution Evidence (Without Auditd)
+
+When auditd was not running, these are the best fallback sources.
+
+```bash
+# Executables modified more recently than /etc/passwd (attacker-dropped tools)
+find /mnt/linux_mount -type f -executable \
+  -newer /mnt/linux_mount/etc/passwd \
+  ! -path "*/proc/*" ! -path "*/sys/*" 2>/dev/null | \
+  sort | tee ./exports/new_executables.txt
+
+# World-writable executables (can be trojanised by any user)
+find /mnt/linux_mount -type f -executable -perm -o+w 2>/dev/null | \
+  tee ./exports/world_writable_executables.txt
+
+# Package installations and removals with timestamps
+# Debian/Ubuntu:
+grep " install \| remove " /mnt/linux_mount/var/log/dpkg.log 2>/dev/null | \
+  tee ./exports/dpkg_installs.txt
+
+# RHEL/CentOS:
+grep "Installed\|Erased" /mnt/linux_mount/var/log/yum.log 2>/dev/null
+grep "Installed\|Removed" /mnt/linux_mount/var/log/dnf.log 2>/dev/null
+```
+
+---
+
+## Temporary / Staging Areas
+
+Attackers routinely stage tools in world-writable directories.
+Enumerate and YARA-scan these before anything else.
+
+```bash
+# All files in staging areas (including hidden dotfiles)
+find /mnt/linux_mount/tmp \
+     /mnt/linux_mount/var/tmp \
+     /mnt/linux_mount/dev/shm \
+  -type f 2>/dev/null | tee ./exports/staging_files.txt
+
+# Hash all staging files for VirusTotal pivot
+find /mnt/linux_mount/tmp \
+     /mnt/linux_mount/var/tmp \
+     /mnt/linux_mount/dev/shm \
+  -type f 2>/dev/null | \
+  xargs sha256sum 2>/dev/null | tee ./exports/staging_hashes.txt
+
+# Copy staging files for offline analysis / YARA scanning
+mkdir -p ./exports/staging/
+find /mnt/linux_mount/tmp \
+     /mnt/linux_mount/var/tmp \
+     /mnt/linux_mount/dev/shm \
+  -type f 2>/dev/null | \
+  xargs -I{} cp --parents {} ./exports/staging/ 2>/dev/null
+```
+
+---
+
+## Web Server Artifacts
+
+```bash
+# Apache: POST requests to script files (webshell execution pattern)
+grep "POST" /mnt/linux_mount/var/log/apache2/access.log 2>/dev/null | \
+  grep -iE "\.(php|asp|jsp|py|sh|cgi|pl)" | \
+  tee ./exports/web_post_requests.txt
+
+# Nginx access log
+grep "POST" /mnt/linux_mount/var/log/nginx/access.log 2>/dev/null | \
+  grep -iE "\.(php|sh|cgi)"
+
+# Error logs — webshell execution errors appear here
+tail -200 /mnt/linux_mount/var/log/apache2/error.log 2>/dev/null
+tail -200 /mnt/linux_mount/var/log/nginx/error.log   2>/dev/null
+
+# Recently modified PHP files (webshell drop)
+find /mnt/linux_mount/var/www \
+     /mnt/linux_mount/srv/www \
+     /mnt/linux_mount/usr/share/nginx \
+  -name "*.php" -newer /mnt/linux_mount/etc/passwd 2>/dev/null | \
+  tee ./exports/new_php_files.txt
+
+# PHP files with eval+base64 or system() — webshell signatures
+find /mnt/linux_mount/var/www -name "*.php" 2>/dev/null | \
+  xargs grep -l \
+    "eval.*base64_decode\|system(\|exec(\|shell_exec(\|passthru(\|popen(" \
+    2>/dev/null | tee ./exports/webshell_candidates.txt
+
+# Non-PHP scripts in web root (shouldn't normally be there)
+find /mnt/linux_mount/var/www \
+  \( -name "*.sh" -o -name "*.py" -o -name "*.pl" -o -name "*.cgi" \) \
+  2>/dev/null
+```
+
+---
+
+## Rootkit Detection
+
+```bash
+# Check ld.so.preload first — most common rootkit injection mechanism
+if [[ -s /mnt/linux_mount/etc/ld.so.preload ]]; then
+    echo "[CRITICAL] /etc/ld.so.preload is non-empty:"
+    cat /mnt/linux_mount/etc/ld.so.preload
+fi
+
+# rkhunter scan against mounted image
+sudo rkhunter \
+  --check \
+  --rootdir /mnt/linux_mount \
+  --no-summary \
+  --skip-keypress 2>/dev/null | tee ./exports/rkhunter_output.txt
+
+# chkrootkit scan
+sudo chkrootkit -r /mnt/linux_mount 2>/dev/null | \
+  tee ./exports/chkrootkit_output.txt
+
+# Package manager integrity check — detects replaced system binaries
+# Debian/Ubuntu: dpkg -V flags files that differ from package records
+dpkg --root=/mnt/linux_mount -V 2>/dev/null | \
+  grep "^.M" | tee ./exports/modified_system_files.txt
+
+# RHEL/CentOS: rpm -Va flags altered files
+rpm --root=/mnt/linux_mount -Va 2>/dev/null | \
+  tee ./exports/rpm_verify.txt
+
+# Kernel module list from disk (use with Volatility linux.check_modules for diff)
+find /mnt/linux_mount/lib/modules -name "*.ko" 2>/dev/null | \
+  xargs -I{} basename {} .ko | sort > ./analysis/modules_on_disk.txt
+```
+
+Note: both `rkhunter` and `chkrootkit` can produce false positives against offline
+mounted images. Triage their findings manually.
+
+---
+
+## Targeted Artifact Extraction (from Mounted Image)
+
+Run these after mounting the evidence image to copy artifacts into `./exports/`
+for offline analysis.
+
+```bash
+# /etc — accounts, SSH config, PAM, persistence config
+sudo mkdir -p ./exports/etc/
+sudo cp -rp /mnt/linux_mount/etc/passwd \
+            /mnt/linux_mount/etc/shadow \
+            /mnt/linux_mount/etc/group \
+            /mnt/linux_mount/etc/sudoers \
+            /mnt/linux_mount/etc/ssh/ \
+            ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/sudoers.d  ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/ld.so.preload ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/ld.so.conf.d ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/crontab    ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/cron.d     ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/systemd    ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/profile.d  ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/profile    ./exports/etc/ 2>/dev/null
+
+# Logs (full /var/log)
+sudo mkdir -p ./exports/logs/
+sudo cp -rp /mnt/linux_mount/var/log ./exports/logs/
+
+# Systemd journal (binary format — read offline with journalctl --directory)
+sudo mkdir -p ./exports/journal/
+sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
+  -exec cp --parents {} ./exports/journal/ \; 2>/dev/null
+
+# Audit log
+sudo mkdir -p ./exports/audit/
+sudo cp -p /mnt/linux_mount/var/log/audit/audit.log ./exports/audit/ 2>/dev/null
+
+# Shell histories (all users)
+sudo mkdir -p ./exports/shell_history/
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  \( -name ".bash_history" -o -name ".zsh_history" \) \
+  -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
+
+# Cron jobs (all locations)
+sudo mkdir -p ./exports/cron/
+for d in crontab cron.d cron.daily cron.hourly cron.weekly cron.monthly; do
+    [[ -e /mnt/linux_mount/etc/$d ]] && \
+        sudo cp -rp /mnt/linux_mount/etc/$d ./exports/cron/
+done
+sudo cp -rp /mnt/linux_mount/var/spool/cron ./exports/cron/spool/ 2>/dev/null
+
+# Systemd service units (system and per-user)
+sudo mkdir -p ./exports/systemd/
+sudo cp -rp /mnt/linux_mount/etc/systemd/system \
+            ./exports/systemd/system/ 2>/dev/null
+sudo find /mnt/linux_mount/home -path "*/.config/systemd" \
+  -exec cp --parents -r {} ./exports/systemd/ \; 2>/dev/null
+
+# SSH authorized_keys (all users)
+sudo mkdir -p ./exports/ssh_keys/
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name "authorized_keys" \
+  -exec cp --parents {} ./exports/ssh_keys/ \; 2>/dev/null
+
+# Staging areas
+sudo mkdir -p ./exports/staging/
+sudo find /mnt/linux_mount/tmp \
+          /mnt/linux_mount/var/tmp \
+          /mnt/linux_mount/dev/shm \
+  -type f 2>/dev/null \
+  -exec cp --parents {} ./exports/staging/ \; 2>/dev/null
+
+# Web root (webshell hunting)
+sudo mkdir -p ./exports/webroot/
+sudo cp -rp /mnt/linux_mount/var/www ./exports/webroot/ 2>/dev/null
+
+# Installed package snapshot
+dpkg --root=/mnt/linux_mount -l \
+  > ./exports/installed_packages_dpkg.txt 2>/dev/null
+rpm --root=/mnt/linux_mount -qa \
+  > ./exports/installed_packages_rpm.txt 2>/dev/null
+```
+
+---
+
+## Key File Paths Reference
+
+| Artifact | Debian / Ubuntu | RHEL / CentOS |
+|----------|----------------|---------------|
+| User accounts | `/etc/passwd` | same |
+| Password hashes | `/etc/shadow` | same |
+| Group memberships | `/etc/group` | same |
+| Sudoers | `/etc/sudoers`, `/etc/sudoers.d/` | same |
+| SSH server config | `/etc/ssh/sshd_config` | same |
+| SSH authorized keys | `~/.ssh/authorized_keys` | same |
+| LD_PRELOAD rootkit | `/etc/ld.so.preload` | same |
+| Library paths | `/etc/ld.so.conf`, `/etc/ld.so.conf.d/` | same |
+| Crontab | `/etc/crontab`, `/etc/cron.d/` | same |
+| User crontabs | `/var/spool/cron/crontabs/<user>` | `/var/spool/cron/<user>` |
+| Systemd units | `/etc/systemd/system/` | same |
+| Auth log | `/var/log/auth.log` | `/var/log/secure` |
+| System log | `/var/log/syslog` | `/var/log/messages` |
+| Kernel log | `/var/log/kern.log` | (included in messages) |
+| Audit log | `/var/log/audit/audit.log` | same |
+| Systemd journal | `/var/log/journal/<machine-id>/` | same |
+| Cron log | `/var/log/cron.log` | `/var/log/cron` |
+| Package install log | `/var/log/dpkg.log` | `/var/log/yum.log` |
+| Login history (wtmp) | `/var/log/wtmp` | same |
+| Failed logins (btmp) | `/var/log/btmp` | same |
+| Last login per user | `/var/log/lastlog` | same |
+| Apache logs | `/var/log/apache2/` | `/var/log/httpd/` |
+| Nginx logs | `/var/log/nginx/` | same |
+| Attacker staging | `/tmp/`, `/var/tmp/`, `/dev/shm/` | same |
+| Web root | `/var/www/html/` | `/var/www/html/` or `/srv/www/` |
+| Kernel modules | `/lib/modules/<kernel>/` | same |
+| Machine ID | `/etc/machine-id` | same |
+
+---
+
+## Notes
+
+- Check `/etc/ld.so.preload` first on every Linux case — a non-empty file means
+  every process loaded attacker code and the system cannot be trusted at all
+- `rkhunter` and `chkrootkit` produce false positives on offline images; triage
+  findings manually before treating them as confirmed
+- Shell history lacks timestamps by default unless `HISTTIMEFORMAT` was set —
+  absence of timestamps is expected, not suspicious
+- `journalctl --directory` is preferred over `--file` when multiple journal files
+  exist in a directory; use `--file` for a single specific journal file
+- `ausearch -f <file>` reads an offline audit log; without `-f` it queries the
+  live system — always specify `-f` for offline evidence
+- Package integrity checks (`dpkg -V`, `rpm -Va`) detect replaced system binaries
+  by comparing file hashes against the package database records
+- Correlate across sources: cron persistence + new executable in /tmp + outbound
+  connection spike typically represent a single attacker action chain
+- For super-timeline generation across all log sources see
+  `@~/.claude/skills/plaso-timeline/SKILL.md` — use `--parsers linux`
+
+---
+
+## Output Paths
+
+| Output | Path |
+|--------|------|
+| Extracted /etc | `./exports/etc/` |
+| System logs | `./exports/logs/` |
+| Systemd journal | `./exports/journal/` |
+| Audit log | `./exports/audit/` |
+| Shell histories | `./exports/shell_history/` |
+| Cron jobs | `./exports/cron/` |
+| Systemd units | `./exports/systemd/` |
+| SSH authorized keys | `./exports/ssh_keys/` |
+| Staging files | `./exports/staging/` |
+| Web root | `./exports/webroot/` |
+| Installed packages | `./exports/installed_packages_*.txt` |
+| SUID binaries list | `./exports/suid_binaries.txt` |
+| New executables | `./exports/new_executables.txt` |
+| rkhunter output | `./exports/rkhunter_output.txt` |
+| chkrootkit output | `./exports/chkrootkit_output.txt` |
+| Modified system files | `./exports/modified_system_files.txt` |
+| YARA hits | `./exports/yara_hits/` |
+| Reports | `./reports/` |

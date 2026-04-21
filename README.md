@@ -97,11 +97,13 @@ protocol-sift/
 │   ├── plaso-timeline/SKILL.md        ← Plaso / log2timeline skill      (5)
 │   ├── sleuthkit/SKILL.md             ← Sleuth Kit / TSK skill          (6)
 │   ├── windows-artifacts/SKILL.md     ← EZ Tools / EVTX / Registry      (7)
-│   └── yara-hunting/SKILL.md          ← YARA / threat hunting skill     (8)
+│   ├── yara-hunting/SKILL.md          ← YARA / threat hunting skill     (8)
+│   └── linux-artifacts/SKILL.md       ← Linux logs / persistence / rootkits (9)
 ├── case-templates/
-│   └── CLAUDE.md                      ← per-case project template       (9)
+│   ├── CLAUDE.md                      ← Windows per-case project template   (10)
+│   └── linux-CLAUDE.md               ← Linux per-case project template      (11)
 └── analysis-scripts/
-    └── generate_pdf_report.py         ← WeasyPrint PDF generator        (10)
+    └── generate_pdf_report.py         ← WeasyPrint PDF generator        (12)
 ```
 
 ---
@@ -178,11 +180,12 @@ gotchas, and output interpretation guidance for a specific forensic toolset.
 
 | Skill file | Domain | Key tools covered |
 |------------|--------|-------------------|
-| `memory-analysis/SKILL.md` | Memory forensics | Volatility 3 plugins, symbol resolution, memory baseliner |
-| `plaso-timeline/SKILL.md` | Timeline generation | log2timeline.py, psort.py, pinfo.py, super-timeline filters |
+| `memory-analysis/SKILL.md` | Memory forensics | Volatility 3 plugins (Windows + Linux), symbol resolution, memory baseliner |
+| `plaso-timeline/SKILL.md` | Timeline generation | log2timeline.py, psort.py, pinfo.py, super-timeline filters (Windows + Linux) |
 | `sleuthkit/SKILL.md` | Filesystem forensics | fls, icat, mmls, mactime, tsk_recover, ewfmount offsets |
 | `windows-artifacts/SKILL.md` | Windows artifacts | EZ Tools suite, EvtxECmd, MFTECmd, RECmd, AmcacheParser |
-| `yara-hunting/SKILL.md` | Threat hunting | YARA rules, IOC sweeps, bulk scanning |
+| `yara-hunting/SKILL.md` | Threat hunting | YARA rules (PE + ELF modules), IOC sweeps, Velociraptor |
+| `linux-artifacts/SKILL.md` | Linux artifacts | Logs, persistence, auditd, journal, shell history, rootkit detection |
 
 **Install:**
 ```bash
@@ -190,13 +193,15 @@ mkdir -p ~/.claude/skills/memory-analysis \
          ~/.claude/skills/plaso-timeline \
          ~/.claude/skills/sleuthkit \
          ~/.claude/skills/windows-artifacts \
-         ~/.claude/skills/yara-hunting
+         ~/.claude/skills/yara-hunting \
+         ~/.claude/skills/linux-artifacts
 
-cp skills/memory-analysis/SKILL.md  ~/.claude/skills/memory-analysis/SKILL.md
-cp skills/plaso-timeline/SKILL.md   ~/.claude/skills/plaso-timeline/SKILL.md
-cp skills/sleuthkit/SKILL.md        ~/.claude/skills/sleuthkit/SKILL.md
+cp skills/memory-analysis/SKILL.md   ~/.claude/skills/memory-analysis/SKILL.md
+cp skills/plaso-timeline/SKILL.md    ~/.claude/skills/plaso-timeline/SKILL.md
+cp skills/sleuthkit/SKILL.md         ~/.claude/skills/sleuthkit/SKILL.md
 cp skills/windows-artifacts/SKILL.md ~/.claude/skills/windows-artifacts/SKILL.md
-cp skills/yara-hunting/SKILL.md     ~/.claude/skills/yara-hunting/SKILL.md
+cp skills/yara-hunting/SKILL.md      ~/.claude/skills/yara-hunting/SKILL.md
+cp skills/linux-artifacts/SKILL.md   ~/.claude/skills/linux-artifacts/SKILL.md
 ```
 
 **How Claude uses them:** The global `CLAUDE.md` contains a routing table that
@@ -321,9 +326,10 @@ cp skills/sleuthkit/SKILL.md         ~/.claude/skills/sleuthkit/SKILL.md
 cp skills/windows-artifacts/SKILL.md ~/.claude/skills/windows-artifacts/SKILL.md
 cp skills/yara-hunting/SKILL.md      ~/.claude/skills/yara-hunting/SKILL.md
 
-# 3. Case template and analysis scripts (reusable across cases)
+# 3. Case templates and analysis scripts (reusable across cases)
 mkdir -p ~/.claude/case-templates ~/.claude/analysis-scripts
-cp case-templates/CLAUDE.md ~/.claude/case-templates/CLAUDE.md
+cp case-templates/CLAUDE.md       ~/.claude/case-templates/CLAUDE.md
+cp case-templates/linux-CLAUDE.md ~/.claude/case-templates/linux-CLAUDE.md
 cp analysis-scripts/generate_pdf_report.py ~/.claude/analysis-scripts/generate_pdf_report.py
 
 # 4. Python dependency for PDF reports
@@ -366,7 +372,13 @@ and are ready to copy into any new case directory — no need to keep the repo a
 # 1. Prepare case directory
 export CASE=CLIENT-IR-2025-001
 mkdir -p /cases/${CASE}/{analysis,exports,reports}
+
+# Windows case:
 cp ~/.claude/case-templates/CLAUDE.md /cases/${CASE}/CLAUDE.md
+
+# Linux case:
+# cp ~/.claude/case-templates/linux-CLAUDE.md /cases/${CASE}/CLAUDE.md
+
 cp ~/.claude/analysis-scripts/generate_pdf_report.py /cases/${CASE}/analysis/
 nano /cases/${CASE}/CLAUDE.md   # fill in case details
 

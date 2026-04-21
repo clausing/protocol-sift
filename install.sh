@@ -99,6 +99,7 @@ SKILLS=(
     sleuthkit
     windows-artifacts
     yara-hunting
+    linux-artifacts
 )
 
 info "Installing skills…"
@@ -138,6 +139,14 @@ if [[ -f "$src" ]]; then
     ok "  case-templates/CLAUDE.md → $CLAUDE_DIR/case-templates/CLAUDE.md"
 else
     warn "  case-templates/CLAUDE.md not found, skipping."
+fi
+
+src="$REPO_DIR/case-templates/linux-CLAUDE.md"
+if [[ -f "$src" ]]; then
+    cp "$src" "$CLAUDE_DIR/case-templates/linux-CLAUDE.md"
+    ok "  case-templates/linux-CLAUDE.md → $CLAUDE_DIR/case-templates/linux-CLAUDE.md"
+else
+    warn "  case-templates/linux-CLAUDE.md not found, skipping."
 fi
 echo
 

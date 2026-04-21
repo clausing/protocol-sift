@@ -136,6 +136,81 @@ rule Known_Bad_Hash
 }
 ```
 
+### ELF Module (Linux Executables)
+
+```yara
+import "elf"
+import "math"
+
+// Detect stripped ELF (no symbol table — common for malware)
+rule Stripped_ELF
+{
+    meta:
+        description = "ELF binary with no symbol table (stripped)"
+
+    condition:
+        uint32(0) == 0x464C457F and
+        not for any section in elf.sections : (section.name == ".symtab")
+}
+
+// Detect UPX-packed ELF
+rule UPX_Packed_ELF
+{
+    meta:
+        description = "ELF binary packed with UPX"
+
+    strings:
+        $upx0   = "UPX0" ascii
+        $upx1   = "UPX1" ascii
+        $upxbng = "UPX!" ascii
+
+    condition:
+        uint32(0) == 0x464C457F and any of them
+}
+
+// Detect shared library exporting common LD_PRELOAD rootkit hooks
+rule LD_PRELOAD_Rootkit_Hooks
+{
+    meta:
+        description = "Shared lib (ET_DYN) exporting multiple common syscall hooks"
+
+    strings:
+        $h1 = "readdir"    ascii
+        $h2 = "getdents"   ascii
+        $h3 = "getdents64" ascii   // hides files from directory listings
+        $h4 = "open64"     ascii
+        $h5 = "fopen"      ascii
+        $h6 = "connect"    ascii   // hides network connections
+        $h7 = "write"      ascii
+        $h8 = "read"       ascii
+
+    condition:
+        elf.type == elf.ET_DYN and 3 of them
+}
+
+// High-entropy ELF (packed / encrypted payload dropper)
+rule High_Entropy_ELF
+{
+    meta:
+        description = "ELF binary with high overall entropy"
+
+    condition:
+        uint32(0) == 0x464C457F and
+        math.entropy(0, filesize) > 7.2
+}
+```
+
+**Useful ELF module fields:**
+| Field | Description |
+|-------|-------------|
+| `elf.type` | `ET_EXEC` (executable), `ET_DYN` (shared lib / PIE), `ET_CORE` (core dump) |
+| `elf.machine` | `EM_386`, `EM_X86_64`, `EM_ARM`, `EM_AARCH64` |
+| `elf.number_of_sections` | Section count (0 = heavily stripped) |
+| `elf.sections[i].name` | `.text`, `.data`, `.bss`, etc. |
+| `elf.symtab_entries` | Symbol table entries (0 = stripped binary) |
+| `elf.dynsym_entries` | Dynamic symbol count |
+| `elf.number_of_segments` | Program header count |
+
 ---
 
 ## YARA Scanning
@@ -147,7 +222,18 @@ yara /path/to/rules.yar /path/to/file
 
 ### Scan a Directory Recursively
 ```bash
+# Windows filesystem
 yara -r /path/to/rules.yar /mnt/windows_mount/Windows/System32/
+
+# Linux filesystem — key target directories
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/bin/          2>/dev/null
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/usr/bin/      2>/dev/null
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/usr/local/bin/ 2>/dev/null
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/tmp/          2>/dev/null
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/var/tmp/      2>/dev/null
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/dev/shm/      2>/dev/null
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/var/www/      2>/dev/null
+yara -r /path/to/linux_rules.yar /mnt/linux_mount/usr/lib/      2>/dev/null
 ```
 
 ### Scan a Memory Image
@@ -306,6 +392,25 @@ Connect to the Velociraptor web console to run hunts across live or collected en
 | `Windows.Detection.Yara.Process` | YARA scan of process memory |
 | `Windows.Detection.Yara.File` | YARA scan of files on disk |
 | `Windows.Detection.Yara.NTFS` | YARA scan via raw NTFS access |
+
+### Linux Artifacts
+
+| Artifact | Purpose |
+|----------|---------|
+| `Linux.Sys.Pslist` | Process listing |
+| `Linux.Sys.Crontab` | All cron jobs (all users) |
+| `Linux.Persistence.CronJob` | Detect suspicious cron entries |
+| `Linux.Sys.Users` | User accounts (/etc/passwd) |
+| `Linux.Sys.Groups` | Group memberships |
+| `Linux.Network.Netstat` | Active network connections |
+| `Linux.Forensics.BashHistory` | Shell command history |
+| `Linux.Forensics.Wtmp` | Login / logout history |
+| `Linux.Sys.Lsmod` | Loaded kernel modules |
+| `Linux.Sys.Services` | Systemd service state |
+| `Linux.Sys.OpenFiles` | Open file descriptors per process |
+| `Linux.Detection.Yara.Process` | YARA scan of process memory |
+| `Linux.Detection.Yara.File` | YARA scan of files on disk |
+| `Linux.Detection.Rootkit` | Common rootkit indicators |
 
 ### Deploy a YARA Hunt (VQL reference)
 ```vql

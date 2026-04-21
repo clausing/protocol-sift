@@ -254,6 +254,98 @@ image_export.py \
 
 ---
 
+## Linux Timeline Workflow
+
+### Full Linux Image Ingest
+
+```bash
+log2timeline.py \
+  --storage-file ./analysis/<CASE_ID>_linux.plaso \
+  --parsers linux \
+  --hashers md5 \
+  --timezone UTC \
+  /mnt/linux_mount/
+```
+
+**What the `linux` parser preset covers:**
+| Parser | Artifact |
+|--------|---------|
+| `syslog` | `/var/log/syslog`, `/var/log/messages` |
+| `selinux` | SELinux audit log |
+| `bash_history` | `.bash_history` (all users) |
+| `dpkg` | Debian/Ubuntu package install/remove log |
+| `apt_history` | APT transaction history |
+| `utmp` | `/var/log/wtmp`, `/var/log/btmp`, `/var/run/utmp` (login events) |
+| `cron` | Cron job execution log |
+| `xchatlog` | XChat IRC logs |
+| `mactime` | bodyfile from `fls` (filesystem MAC times) |
+
+> The `linux` parser does **not** include the systemd journal — use the
+> `systemd_journal` parser separately (see below).
+
+### Targeted Linux Ingest Options
+
+```bash
+# Parse only the log directory (faster than full image)
+log2timeline.py \
+  --storage-file ./analysis/<CASE_ID>_logs.plaso \
+  --parsers linux \
+  --timezone UTC \
+  /mnt/linux_mount/var/log/
+
+# Systemd journal (separate parser — not included in linux preset)
+log2timeline.py \
+  --storage-file ./analysis/<CASE_ID>_journal.plaso \
+  --parsers systemd_journal \
+  --timezone UTC \
+  ./exports/journal/
+
+# Filesystem MAC times (from fls bodyfile — pairs with linux log ingest)
+log2timeline.py \
+  --storage-file ./analysis/<CASE_ID>_fls.plaso \
+  --parsers mactime \
+  --timezone UTC \
+  ./analysis/bodyfile.txt
+
+# Merge log + journal + filesystem into one timeline
+psort.py -o l2tcsv \
+  -w ./exports/<CASE_ID>_linux_merged.csv \
+  ./analysis/<CASE_ID>_linux.plaso \
+  ./analysis/<CASE_ID>_journal.plaso \
+  ./analysis/<CASE_ID>_fls.plaso
+```
+
+### image_export.py — Linux Artifact Extraction
+
+Extract specific Linux artifact paths from a disk image without mounting it:
+
+```bash
+# Export Linux logs and config files via filter
+image_export.py \
+  --write ./exports/files/ \
+  --filter /path/to/linux_filter.txt \
+  /mnt/ewf/ewf1
+
+# Example linux_filter.txt contents:
+#   /etc/passwd
+#   /etc/shadow
+#   /etc/crontab
+#   /etc/cron.d/
+#   /var/log/
+#   /home/*/.bash_history
+#   /root/.bash_history
+#   /etc/systemd/system/
+#   /var/spool/cron/
+
+# Export by extension
+image_export.py \
+  --write ./exports/files/ \
+  --extension "log,conf" \
+  /mnt/ewf/ewf1
+```
+
+---
+
 ## Filtering in Timeline Explorer (GUI)
 
 After exporting to CSV, open in Timeline Explorer (`wine` or Windows VM):
