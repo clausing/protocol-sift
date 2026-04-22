@@ -107,6 +107,9 @@ lastb -F -f /mnt/linux_mount/var/log/btmp | head -100
 Reading the offline binary journal from a mounted image is non-obvious — document it:
 
 ```bash
+# Find machine-id first — required to locate journal directory
+cat /mnt/linux_mount/etc/machine-id
+
 # Read journal from mounted evidence (key non-obvious workflow)
 journalctl \
   --file /mnt/linux_mount/var/log/journal/<machine-id>/*.journal \
@@ -132,9 +135,6 @@ journalctl \
 journalctl \
   --file /mnt/linux_mount/var/log/journal/<machine-id>/*.journal \
   -k --utc --no-pager
-
-# Find machine-id
-cat /mnt/linux_mount/etc/machine-id
 
 # Export to JSON for scripted analysis
 journalctl \
