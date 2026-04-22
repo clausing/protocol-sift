@@ -297,6 +297,29 @@ find /mnt/linux_mount/home /mnt/linux_mount/root \
   xargs grep -lE "ExecStart=.*(\/tmp\/|\/dev\/shm\/|base64|bash -i)" 2>/dev/null
 ```
 
+**SysV init scripts and rc.local**
+```bash
+# SysV init scripts (wrapped by systemd-sysv-generator on systemd hosts)
+ls -la /mnt/linux_mount/etc/init.d/ 2>/dev/null
+
+# Runlevel symlinks
+ls -la /mnt/linux_mount/etc/rc2.d/ \
+        /mnt/linux_mount/etc/rc3.d/ \
+        /mnt/linux_mount/etc/rc5.d/ 2>/dev/null
+
+# rc.local — executed by rc-local.service at boot if executable (check even on systemd)
+ls -la /mnt/linux_mount/etc/rc.local 2>/dev/null
+cat /mnt/linux_mount/etc/rc.local 2>/dev/null
+# RHEL/CentOS:
+cat /mnt/linux_mount/etc/rc.d/rc.local 2>/dev/null
+
+# Red flags
+grep -rE "(wget|curl|base64|bash -i|nc |/tmp/|/dev/shm)" \
+  /mnt/linux_mount/etc/init.d/ \
+  /mnt/linux_mount/etc/rc.local \
+  /mnt/linux_mount/etc/rc.d/rc.local 2>/dev/null
+```
+
 **LD_PRELOAD / ld.so.preload (rootkit injection vector)**
 ```bash
 # If this file exists it is loaded into EVERY process — high priority
@@ -528,6 +551,9 @@ sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
 | Systemd user units (all users) | `/etc/systemd/user/` | same |
 | Systemd user units (packages) | `/usr/lib/systemd/user/` | same |
 | Systemd per-user units | `~/.config/systemd/user/` | same |
+| SysV init scripts | `/etc/init.d/` | same |
+| SysV runlevel links | `/etc/rc2.d/`, `/etc/rc3.d/`, `/etc/rc5.d/` | `/etc/rc.d/` |
+| Legacy boot script | `/etc/rc.local` | `/etc/rc.d/rc.local` |
 | Auth log | `/var/log/auth.log` | `/var/log/secure` |
 | System log | `/var/log/syslog` | `/var/log/messages` |
 | Kernel log | `/var/log/kern.log` | included in `/var/log/messages` |
