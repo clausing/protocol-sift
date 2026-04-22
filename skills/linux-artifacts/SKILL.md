@@ -339,30 +339,25 @@ for line in sys.stdin:
 ## Shell History
 
 ```bash
-# Bash history for all users
-find /mnt/linux_mount/home /mnt/linux_mount/root \
-  -name ".bash_history" 2>/dev/null | \
-  while IFS= read -r f; do
-    echo "=== $f ==="
-    cat "$f"
-  done | tee ./exports/bash_history_all.txt
+# Helper: read + export a set of history files
+_dump_hist() {
+  local name="$1"; shift
+  find /mnt/linux_mount/home /mnt/linux_mount/root "$@" 2>/dev/null | \
+    while IFS= read -r f; do echo "=== $f ==="; cat "$f"; done \
+    | tee "./exports/${name}_history_all.txt"
+}
 
-# Zsh history
-find /mnt/linux_mount/home /mnt/linux_mount/root \
-  -name ".zsh_history" 2>/dev/null | \
-  while IFS= read -r f; do
-    echo "=== $f ==="
-    cat "$f"
-  done | tee ./exports/zsh_history_all.txt
+_dump_hist bash  -name ".bash_history"
+_dump_hist zsh   -name ".zsh_history" -o -name ".zhistory"
+_dump_hist fish  -path "*/fish/fish_history"   # YAML: cmd + epoch timestamp per entry
+_dump_hist tcsh  -name ".history"              # tcsh / csh
+_dump_hist ksh   -name ".sh_history"           # ksh
 
-# Fish shell history (stores timestamps per command in YAML format)
-find /mnt/linux_mount/home /mnt/linux_mount/root \
-  -path "*/fish/fish_history" 2>/dev/null
-
-# Red flags: downloaders, encoders, reverse shells
-grep -iE \
-  "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |bash -i|python.*-c|perl.*-e|mkfifo)" \
-  ./exports/bash_history_all.txt | tee ./exports/bash_history_suspicious.txt
+# Red flags across all shell histories
+cat ./exports/*_history_all.txt 2>/dev/null | \
+  grep -iE \
+    "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |bash -i|python.*-c|perl.*-e|mkfifo)" \
+  | tee ./exports/shell_history_suspicious.txt
 
 # HISTFILE tampering — attacker may disable history recording
 grep -rE "(HISTSIZE=0|HISTFILESIZE=0|HISTFILE=/dev/null)" \
@@ -750,7 +745,8 @@ sudo cp -p /mnt/linux_mount/var/log/audit/audit.log ./exports/audit/ 2>/dev/null
 # Shell histories (all users)
 sudo mkdir -p ./exports/shell_history/
 sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
-  \( -name ".bash_history" -o -name ".zsh_history" \) \
+  \( -name ".bash_history" -o -name ".zsh_history" -o -name ".zhistory" \
+     -o -path "*/fish/fish_history" -o -name ".history" -o -name ".sh_history" \) \
   -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
 
 # Cron jobs (all locations)

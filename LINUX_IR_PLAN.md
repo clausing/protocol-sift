@@ -206,22 +206,27 @@ Key auditd record types:
 #### 6. Shell History
 
 ```bash
-# Bash history for all users (from mounted image)
-find /mnt/linux_mount/home /mnt/linux_mount/root -name ".bash_history" 2>/dev/null | \
-  while read f; do echo "=== $f ==="; cat "$f"; done | tee ./exports/bash_history_all.txt
+# All shell histories — bash, zsh, fish, tcsh/csh, ksh
+for spec in \
+  "bash:-name .bash_history" \
+  "zsh:-name .zsh_history -o -name .zhistory" \
+  "fish:-path */fish/fish_history" \
+  "tcsh:-name .history" \
+  "ksh:-name .sh_history"
+do
+  shell="${spec%%:*}"; pat="${spec#*:}"
+  find /mnt/linux_mount/home /mnt/linux_mount/root $pat 2>/dev/null | \
+    while IFS= read -r f; do echo "=== $f ==="; cat "$f"; done \
+    | tee "./exports/${shell}_history_all.txt"
+done
 
-# Zsh history
-find /mnt/linux_mount/home /mnt/linux_mount/root -name ".zsh_history" 2>/dev/null
-
-# Fish history
-find /mnt/linux_mount/home /mnt/linux_mount/root -path "*/fish/fish_history" 2>/dev/null
-
-# Red flags in bash history
-grep -iE "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |/bin/sh|python.*-c|perl.*-e)" \
-  ./exports/bash_history_all.txt
+# Red flags across all shell histories
+cat ./exports/*_history_all.txt 2>/dev/null | \
+  grep -iE "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |/bin/sh|python.*-c|perl.*-e)" \
+  | tee ./exports/shell_history_suspicious.txt
 
 # HISTFILE tampering indicator: HISTSIZE=0 or HISTFILESIZE=0 in RC files
-grep -rE "(HISTSIZE|HISTFILESIZE|HISTFILE)" \
+grep -rE "(HISTSIZE=0|HISTFILESIZE=0|HISTFILE=/dev/null)" \
   /mnt/linux_mount/home/*/.bashrc \
   /mnt/linux_mount/home/*/.bash_profile \
   /mnt/linux_mount/root/.bashrc 2>/dev/null
@@ -438,11 +443,12 @@ sudo cp -r /mnt/linux_mount/etc ./exports/etc/
 sudo mkdir -p ./exports/logs/
 sudo cp -rp /mnt/linux_mount/var/log ./exports/logs/
 
-# Shell histories — all users
+# Shell histories — all users, all shells
 sudo mkdir -p ./exports/shell_history/
 sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
-  -name ".bash_history" -o -name ".zsh_history" 2>/dev/null | \
-  xargs -I{} cp --parents {} ./exports/shell_history/
+  \( -name ".bash_history" -o -name ".zsh_history" -o -name ".zhistory" \
+     -o -path "*/fish/fish_history" -o -name ".history" -o -name ".sh_history" \) \
+  -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
 
 # Systemd units
 sudo mkdir -p ./exports/systemd/
@@ -732,7 +738,17 @@ image_export.py \
 #   /etc/cron.d/
 #   /var/log/
 #   /home/*/.bash_history
+#   /home/*/.zsh_history
+#   /home/*/.zhistory
+#   /home/*/.history
+#   /home/*/.sh_history
+#   /home/*/.local/share/fish/fish_history
 #   /root/.bash_history
+#   /root/.zsh_history
+#   /root/.zhistory
+#   /root/.history
+#   /root/.sh_history
+#   /root/.local/share/fish/fish_history
 #   /etc/systemd/system/*.service
 ```
 
@@ -765,9 +781,11 @@ sudo cp -rp /mnt/linux_mount/var/log/secure   ./exports/logs/ 2>/dev/null
 sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
   -exec cp --parents {} ./exports/journal/ \; 2>/dev/null
 
-# Bash histories
+# Shell histories — all shells
 sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
-  -name ".bash_history" -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
+  \( -name ".bash_history" -o -name ".zsh_history" -o -name ".zhistory" \
+     -o -path "*/fish/fish_history" -o -name ".history" -o -name ".sh_history" \) \
+  -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
 ```
 
 **Add ext4 notes:**
