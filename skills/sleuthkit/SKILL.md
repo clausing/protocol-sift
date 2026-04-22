@@ -136,71 +136,11 @@ sudo mount -o ro,loop,nosuid,noexec,nodev,norecovery,offset=${OFFSET} /mnt/ewf/e
 
 ---
 
-### LVM Activation (when partition type is Linux LVM)
+### LVM / Btrfs (Linux evidence — cross-reference)
 
-TSK cannot read inside LVM. Use `kpartx` to surface logical volumes, then mount them.
-
-```bash
-# Step 1: Set up a loop device on the EWF raw image
-sudo losetup -f --show /mnt/ewf/ewf1
-# Note the loop device name, e.g., /dev/loop0
-
-# Step 2: Map all partitions from the loop device
-sudo kpartx -av /dev/loop0
-# Creates /dev/mapper/loop0p1, /dev/mapper/loop0p2, etc.
-
-# Step 3: Scan for LVM volume groups
-sudo pvscan          # confirm physical volume(s) are recognised
-sudo vgscan          # discover volume group names
-
-# Step 4: Activate volume group(s) read-only where possible
-# Note: -ay is required to surface logical volumes; -an deactivates
-sudo vgchange -ay
-
-# Step 5: List logical volumes
-sudo lvs             # summary: LV name, VG name, size
-sudo lvdisplay       # full details including device path
-
-# Step 6: Mount the logical volume of interest (read-only)
-sudo mkdir -p /mnt/linux_mount
-
-# ext4 or XFS: norecovery prevents journal replay
-sudo mount -o ro,nosuid,noexec,nodev,norecovery /dev/vgname/lvname /mnt/linux_mount
-
-# Btrfs: ro alone is sufficient
-sudo mount -o ro,nosuid,noexec,nodev /dev/vgname/lvname /mnt/linux_mount
-
-# Cleanup (reverse order)
-sudo umount /mnt/linux_mount
-sudo vgchange -an vgname     # deactivate volume group
-sudo kpartx -dv /dev/loop0
-sudo losetup -d /dev/loop0
-sudo umount /mnt/ewf
-```
-
-Common logical volume names: `root`, `home`, `var`, `swap`.
-The device path is `/dev/<vgname>/<lvname>` or equivalently `/dev/mapper/<vgname>-<lvname>`.
-
----
-
-### Btrfs Subvolumes
-
-Btrfs uses subvolumes — a naive `mount` often lands in the top-level subvolume
-rather than the actual root filesystem. The root OS is usually in subvolume `@`.
-
-```bash
-# Mount at the top level first to list subvolumes
-sudo mount -o ro,nosuid,noexec,nodev /dev/... /mnt/linux_mount
-sudo btrfs subvolume list /mnt/linux_mount
-
-# Example output:
-# ID 256 gen 45 top level 5 path @
-# ID 257 gen 44 top level 5 path @home
-
-# Remount to the correct subvolume (usually @)
-sudo umount /mnt/linux_mount
-sudo mount -o ro,nosuid,noexec,nodev,subvol=@ /dev/... /mnt/linux_mount
-```
+TSK cannot read inside LVM; Btrfs requires subvolume selection after the initial mount.
+For both, see `@~/.claude/case-templates/linux-CLAUDE.md` (mount commands) and
+`@~/.claude/skills/linux-artifacts/SKILL.md` (artifact workflow).
 
 ### 6. Filesystem Metadata
 
@@ -379,20 +319,7 @@ On ext4, XFS, and Btrfs it is populated when the kernel and glibc support it.
 
 #### Method C — Plaso (all filesystems, recommended for Linux IR)
 
-Plaso's `linux` parser extracts filesystem MAC times directly from the mounted
-filesystem, supporting ext4, XFS, Btrfs, and any other mountable filesystem.
-Always use the mounted path (`/mnt/linux_mount/`), never the raw image, for
-non-ext4 Linux evidence.
-
-```bash
-log2timeline.py \
-  --storage-file ./analysis/<CASE_ID>_linux.plaso \
-  --parsers linux \
-  --timezone UTC \
-  /mnt/linux_mount/
-```
-
-See `@~/.claude/skills/plaso-timeline/SKILL.md` for full Plaso workflow.
+See `@~/.claude/skills/plaso-timeline/SKILL.md` for the full Linux Plaso workflow.
 
 **mactime flags:**
 | Flag | Description |
@@ -461,82 +388,16 @@ sudo find /mnt/windows_mount/Users/ -name "PowerShell_transcript*.txt" \
   -exec cp --parents {} ./exports/pslogs/ \;
 ```
 
-### Linux Targeted Artifact Extraction
+### Linux Artifact Extraction
 
-When the evidence is a Linux disk image, extract these artifacts instead of
-(or in addition to) the Windows artifacts above.
-
-```bash
-# /etc — accounts, SSH config, sudoers, cron, systemd, PAM
-sudo mkdir -p ./exports/etc/
-sudo cp -rp /mnt/linux_mount/etc/passwd \
-            /mnt/linux_mount/etc/shadow \
-            /mnt/linux_mount/etc/group \
-            /mnt/linux_mount/etc/sudoers \
-            /mnt/linux_mount/etc/ssh/ \
-            ./exports/etc/ 2>/dev/null
-sudo cp -rp /mnt/linux_mount/etc/sudoers.d  ./exports/etc/ 2>/dev/null
-sudo cp -p  /mnt/linux_mount/etc/ld.so.preload ./exports/etc/ 2>/dev/null
-sudo cp -p  /mnt/linux_mount/etc/crontab    ./exports/etc/ 2>/dev/null
-sudo cp -rp /mnt/linux_mount/etc/cron.d     ./exports/etc/ 2>/dev/null
-sudo cp -rp /mnt/linux_mount/etc/systemd    ./exports/etc/ 2>/dev/null
-sudo cp -rp /mnt/linux_mount/etc/profile.d  ./exports/etc/ 2>/dev/null
-
-# Logs (full /var/log)
-sudo mkdir -p ./exports/logs/
-sudo cp -rp /mnt/linux_mount/var/log ./exports/logs/
-
-# Systemd journal (binary format — read with journalctl --directory)
-sudo mkdir -p ./exports/journal/
-sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
-  -exec cp --parents {} ./exports/journal/ \; 2>/dev/null
-
-# Audit log
-sudo mkdir -p ./exports/audit/
-sudo cp -p /mnt/linux_mount/var/log/audit/audit.log ./exports/audit/ 2>/dev/null
-
-# Shell histories (all users)
-sudo mkdir -p ./exports/shell_history/
-sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
-  \( -name ".bash_history" -o -name ".zsh_history" \) \
-  -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
-
-# Per-user crontabs
-sudo mkdir -p ./exports/cron/
-sudo cp -rp /mnt/linux_mount/var/spool/cron ./exports/cron/spool/ 2>/dev/null
-
-# SSH authorized_keys (all users)
-sudo mkdir -p ./exports/ssh_keys/
-sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
-  -name "authorized_keys" \
-  -exec cp --parents {} ./exports/ssh_keys/ \; 2>/dev/null
-
-# Staging areas (attacker drop zones)
-sudo mkdir -p ./exports/staging/
-sudo find /mnt/linux_mount/tmp \
-          /mnt/linux_mount/var/tmp \
-          /mnt/linux_mount/dev/shm \
-  -type f 2>/dev/null \
-  -exec cp --parents {} ./exports/staging/ \; 2>/dev/null
-
-# Web root (webshell hunting)
-sudo mkdir -p ./exports/webroot/
-sudo cp -rp /mnt/linux_mount/var/www ./exports/webroot/ 2>/dev/null
-
-# Installed package snapshot
-dpkg --root=/mnt/linux_mount -l \
-  > ./exports/installed_packages_dpkg.txt 2>/dev/null
-rpm --root=/mnt/linux_mount -qa \
-  > ./exports/installed_packages_rpm.txt 2>/dev/null
-```
+See `@~/.claude/skills/linux-artifacts/SKILL.md` for the complete Linux artifact
+extraction workflow (accounts, logs, journal, shell histories, persistence, staging areas).
 
 **ext4 / Linux filesystem notes:**
 - TSK tools (`fls`, `icat`, `mactime`, etc.) support **ext2/3/4 only** for Linux filesystems
 - Root directory inode on ext4 is **inode 2** (not inode 5 as on NTFS)
-- `norecovery` prevents journal replay on NTFS, ext3/ext4, and XFS; for Btrfs `-o ro` alone is sufficient
-- For XFS or Btrfs evidence: skip TSK filesystem navigation entirely — use Method B or C above
-- For LVM evidence: activate with `kpartx` + `vgchange -ay` before mounting (see LVM section)
-- For Btrfs: list subvolumes after initial mount and remount with `-o ro,subvol=@` if needed
+- `norecovery` prevents journal replay on NTFS, ext3/ext4, and XFS; Btrfs: `-o ro` only
+- For XFS, Btrfs, or LVM: see `@~/.claude/case-templates/linux-CLAUDE.md` and `@~/.claude/skills/linux-artifacts/SKILL.md`
 
 ---
 
