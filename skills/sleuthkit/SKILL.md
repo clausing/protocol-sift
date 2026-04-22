@@ -354,7 +354,7 @@ with `mactime`.
 # Step 1: Generate bodyfile from mounted path
 # Format: MD5|path|inode|mode|uid|gid|size|atime|mtime|ctime|crtime
 sudo find /mnt/linux_mount -xdev -printf \
-  "0|%p|%i|%M|%U|%G|%s|%A@|%T@|%C@|0\n" 2>/dev/null \
+  "0|%p|%i|%M|%U|%G|%s|%A@|%T@|%C@|%W@\n" 2>/dev/null \
   > ./analysis/bodyfile.txt
 
 # Step 2: Convert to timeline with mactime (same as Method A)
@@ -372,9 +372,10 @@ mactime -b ./analysis/bodyfile.txt -z UTC -d > ./exports/fs_timeline.csv
 | `%A@` | Last access time (Unix epoch) |
 | `%T@` | Last modification time (Unix epoch) |
 | `%C@` | Last status change time (Unix epoch) |
+| `%W@` | Birth/creation time (Unix epoch); `0` if unsupported by filesystem |
 
-Note: Linux (ext4, XFS, Btrfs) does not reliably expose creation time (`crtime`).
-The final `0` is a placeholder — `mactime` ignores it in most output modes.
+Note: `%W@` returns `0` on filesystems that do not store birth time (e.g., older ext3).
+On ext4, XFS, and Btrfs it is populated when the kernel and glibc support it.
 
 #### Method C — Plaso (all filesystems, recommended for Linux IR)
 
