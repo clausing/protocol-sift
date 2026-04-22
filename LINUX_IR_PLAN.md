@@ -917,6 +917,7 @@ A Linux case needs different metadata fields than a Windows domain investigation
 | **OS** | Ubuntu 22.04 / Debian 11 / RHEL 8 / etc. |
 | **Kernel** | <uname -r output — needed for Volatility Linux symbols> |
 | **Init System** | systemd / SysV |
+| **Timezone** | <e.g. America/New_York — affects syslog/auth.log timestamps; journald/auditd readable in UTC regardless> |
 | **Auditd Running** | Yes / No / Unknown |
 | **Threat Actor** | <name if known> |
 | **Incident Declared** | <date UTC> |

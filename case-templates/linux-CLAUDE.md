@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **Init System** | <!-- systemd / SysV --> |
 | **Filesystem** | <!-- ext4 / xfs / btrfs / LVM+ext4 / LVM+xfs --> |
 | **Auditd Configured** | <!-- Yes (with execve rules) / Yes (minimal) / No / Unknown --> |
+| **Timezone** | <!-- e.g. America/New_York — affects syslog/auth.log timestamps; journald/auditd can be read in UTC regardless --> |
 | **Threat Actor** | <!-- Name or designation if known --> |
 | **Incident Declared** | <!-- YYYY-MM-DD UTC --> |
 | **Your Role** | External IR consultant |
@@ -93,6 +94,12 @@ ls /mnt/linux_mount/
 cat /mnt/linux_mount/etc/os-release
 cat /mnt/linux_mount/etc/machine-id
 df -Th /mnt/linux_mount
+
+# System timezone — syslog/auth.log timestamps reflect this; journald/auditd readable in UTC regardless
+cat /mnt/linux_mount/etc/timezone 2>/dev/null        # Debian/Ubuntu; may not exist on RHEL
+ls -la /mnt/linux_mount/etc/localtime                # symlink target shows TZ on modern distros
+# If /etc/localtime is a binary zoneinfo copy (not a symlink):
+# strings /mnt/linux_mount/etc/localtime | tail -2
 ```
 
 ### Volatility 3 (Linux memory)
