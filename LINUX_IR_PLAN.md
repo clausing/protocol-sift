@@ -369,8 +369,9 @@ find /mnt/linux_mount -type f -executable -newer /mnt/linux_mount/etc/passwd \
 # World-writable executables (dangerous)
 find /mnt/linux_mount -type f -executable -perm -o+w 2>/dev/null
 
-# Files in staging areas (attacker drop zones)
-find /mnt/linux_mount/tmp /mnt/linux_mount/var/tmp /mnt/linux_mount/dev/shm \
+# Files in persistent staging areas (attacker drop zones)
+# NOTE: /dev/shm and /run are tmpfs — not in disk images; capture live with Velociraptor
+find /mnt/linux_mount/tmp /mnt/linux_mount/var/tmp \
   -type f 2>/dev/null
 
 # Package manager logs reveal what was installed/removed and when
@@ -467,10 +468,11 @@ dpkg --root=/mnt/linux_mount -l > ./exports/installed_packages_dpkg.txt 2>/dev/n
   cat /mnt/linux_mount/var/lib/dpkg/status > ./exports/installed_packages_dpkg.txt 2>/dev/null
 rpm --root=/mnt/linux_mount -qa > ./exports/installed_packages_rpm.txt 2>/dev/null
 
-# /tmp, /var/tmp, /dev/shm (attacker staging)
+# /tmp, /var/tmp — persistent staging (attacker drop zones)
+# /dev/shm and /run are tmpfs — absent from disk images; collect live with Velociraptor
 sudo mkdir -p ./exports/staging/
 sudo find /mnt/linux_mount/tmp /mnt/linux_mount/var/tmp \
-  /mnt/linux_mount/dev/shm -type f 2>/dev/null | \
+  -type f 2>/dev/null | \
   xargs -I{} cp --parents {} ./exports/staging/ 2>/dev/null
 
 # Audit log
@@ -508,7 +510,8 @@ sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
 | Last login per user | `/var/log/lastlog` | same |
 | Apache logs | `/var/log/apache2/` | `/var/log/httpd/` |
 | Nginx logs | `/var/log/nginx/` | same |
-| Temp staging | `/tmp/`, `/var/tmp/`, `/dev/shm/` | same |
+| Temp staging (disk) | `/tmp/`, `/var/tmp/` | same |
+| Temp staging (tmpfs — live only) | `/dev/shm/`, `/run/` | same |
 | Web root | `/var/www/html/` | `/var/www/html/` or `/srv/www/` |
 
 #### 13. Output Paths

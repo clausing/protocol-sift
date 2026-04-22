@@ -590,17 +590,25 @@ grep "Installed\|Removed" /mnt/linux_mount/var/log/dnf.log 2>/dev/null
 Attackers routinely stage tools in world-writable directories.
 Enumerate and YARA-scan these before anything else.
 
+> **tmpfs locations are NOT in disk images:** `/dev/shm`, `/run`, and (on some distros)
+> `/tmp` are tmpfs (RAM-backed) mounts — the mount point exists on disk but the contents
+> are lost at shutdown and absent from disk images. Capture them from a **live running
+> system** before acquisition using Velociraptor or direct collection.
+
+### From disk image (`/tmp` and `/var/tmp` only)
+
+`/var/tmp` is always persistent. `/tmp` may be persistent or tmpfs — check
+`/mnt/linux_mount/etc/fstab` for a `tmpfs /tmp` entry.
+
 ```bash
-# All files in staging areas (including hidden dotfiles)
+# All files in persistent staging areas (including hidden dotfiles)
 find /mnt/linux_mount/tmp \
      /mnt/linux_mount/var/tmp \
-     /mnt/linux_mount/dev/shm \
   -type f 2>/dev/null | tee ./exports/staging_files.txt
 
 # Hash all staging files for VirusTotal pivot
 find /mnt/linux_mount/tmp \
      /mnt/linux_mount/var/tmp \
-     /mnt/linux_mount/dev/shm \
   -type f 2>/dev/null | \
   xargs sha256sum 2>/dev/null | tee ./exports/staging_hashes.txt
 
@@ -608,9 +616,21 @@ find /mnt/linux_mount/tmp \
 mkdir -p ./exports/staging/
 find /mnt/linux_mount/tmp \
      /mnt/linux_mount/var/tmp \
-     /mnt/linux_mount/dev/shm \
   -type f 2>/dev/null | \
   xargs -I{} cp --parents {} ./exports/staging/ 2>/dev/null
+```
+
+### From live system (tmpfs — requires Velociraptor or direct access)
+
+```bash
+# Velociraptor: collect files from ephemeral tmpfs locations
+# Linux.Search.FileFinder with Glob: /dev/shm/**, /run/**, /tmp/**
+
+# Direct collection (if shell access to live system)
+find /dev/shm /run /tmp -type f 2>/dev/null | \
+  xargs sha256sum 2>/dev/null | tee ./exports/live_staging_hashes.txt
+find /dev/shm /run /tmp -type f 2>/dev/null | \
+  xargs -I{} cp --parents {} ./exports/live_staging/ 2>/dev/null
 ```
 
 ---
@@ -754,11 +774,10 @@ sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
   -name "authorized_keys" \
   -exec cp --parents {} ./exports/ssh_keys/ \; 2>/dev/null
 
-# Staging areas
+# Staging areas (disk image only — /dev/shm and /run are tmpfs, not captured in images)
 sudo mkdir -p ./exports/staging/
 sudo find /mnt/linux_mount/tmp \
           /mnt/linux_mount/var/tmp \
-          /mnt/linux_mount/dev/shm \
   -type f 2>/dev/null \
   -exec cp --parents {} ./exports/staging/ \; 2>/dev/null
 
@@ -802,7 +821,8 @@ rpm --root=/mnt/linux_mount -qa \
 | Last login per user | `/var/log/lastlog` | same |
 | Apache logs | `/var/log/apache2/` | `/var/log/httpd/` |
 | Nginx logs | `/var/log/nginx/` | same |
-| Attacker staging | `/tmp/`, `/var/tmp/`, `/dev/shm/` | same |
+| Attacker staging (disk) | `/tmp/`, `/var/tmp/` | same |
+| Attacker staging (tmpfs — live only) | `/dev/shm/`, `/run/` | same |
 | Web root | `/var/www/html/` | `/var/www/html/` or `/srv/www/` |
 | Kernel modules | `/lib/modules/<kernel>/` | same |
 | Machine ID | `/etc/machine-id` | same |
