@@ -402,15 +402,26 @@ grep -rE "(/tmp/|/dev/shm|base64|wget|curl|python|perl|bash -i)" \
 ### Systemd Services and Timers
 
 ```bash
-# System-wide service units
-ls -la /mnt/linux_mount/etc/systemd/system/*.service 2>/dev/null | \
+# System-wide service units — two locations:
+#   /etc/systemd/system/     admin/attacker-created (highest priority)
+#   /usr/lib/systemd/system/ package-installed (check for backdoored packages)
+ls -la /mnt/linux_mount/etc/systemd/system/*.service \
+        /mnt/linux_mount/usr/lib/systemd/system/*.service 2>/dev/null | \
   tee ./exports/systemd_services.txt
 
-# Timer units (scheduled task equivalent)
-ls -la /mnt/linux_mount/etc/systemd/system/*.timer 2>/dev/null
+# Timer units (scheduled task equivalent) — same two locations
+ls -la /mnt/linux_mount/etc/systemd/system/*.timer \
+        /mnt/linux_mount/usr/lib/systemd/system/*.timer 2>/dev/null
 
-# User-level units (run without root)
-find /mnt/linux_mount/home -path "*/.config/systemd/user/*.service" 2>/dev/null
+# System-wide user units (applied to all users; /etc requires root to create)
+ls -la /mnt/linux_mount/etc/systemd/user/ 2>/dev/null
+ls -la /mnt/linux_mount/usr/lib/systemd/user/ 2>/dev/null
+
+# Per-user units (any user can create — also check .timer and .socket)
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  \( -path "*/.config/systemd/user/*.service" \
+     -o -path "*/.config/systemd/user/*.timer" \
+     -o -path "*/.config/systemd/user/*.socket" \) 2>/dev/null
 
 # Units enabled at boot (symlinked into wants directories)
 ls -la /mnt/linux_mount/etc/systemd/system/multi-user.target.wants/ 2>/dev/null
@@ -418,10 +429,20 @@ ls -la /mnt/linux_mount/etc/systemd/system/multi-user.target.wants/ 2>/dev/null
 # Inspect a unit file
 cat /mnt/linux_mount/etc/systemd/system/<unit>.service
 
-# Red flags: ExecStart from staging areas or using interpreters
+# Red flags: scan all persistent unit locations
 grep -rE "ExecStart=.*(\/tmp\/|\/dev\/shm\/|base64|bash -i|python|perl|curl|wget)" \
-  /mnt/linux_mount/etc/systemd/system/ 2>/dev/null | \
-  tee ./exports/systemd_suspicious.txt
+  /mnt/linux_mount/etc/systemd/system/ \
+  /mnt/linux_mount/etc/systemd/user/ \
+  /mnt/linux_mount/usr/lib/systemd/system/ \
+  /mnt/linux_mount/usr/lib/systemd/user/ \
+  2>/dev/null | tee ./exports/systemd_suspicious.txt
+
+# Red flags in per-user units
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -path "*/.config/systemd/user/*" \
+  \( -name "*.service" -o -name "*.timer" \) 2>/dev/null | \
+  xargs grep -lE "ExecStart=.*(\/tmp\/|\/dev\/shm\/|base64|bash -i|python|perl|curl|wget)" \
+  2>/dev/null >> ./exports/systemd_suspicious.txt
 ```
 
 ### LD_PRELOAD / ld.so.preload
@@ -760,8 +781,12 @@ sudo cp -rp /mnt/linux_mount/var/spool/cron ./exports/cron/spool/ 2>/dev/null
 # Systemd service units (system and per-user)
 sudo mkdir -p ./exports/systemd/
 sudo cp -rp /mnt/linux_mount/etc/systemd/system \
-            ./exports/systemd/system/ 2>/dev/null
-sudo find /mnt/linux_mount/home -path "*/.config/systemd" \
+            ./exports/systemd/etc_system/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/systemd/user \
+            ./exports/systemd/etc_user/ 2>/dev/null
+# /usr/lib/systemd/ is large — copy only modified/suspicious units selectively
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -path "*/.config/systemd" \
   -exec cp --parents -r {} ./exports/systemd/ \; 2>/dev/null
 
 # SSH authorized_keys (all users)
@@ -804,7 +829,11 @@ rpm --root=/mnt/linux_mount -qa \
 | Library paths | `/etc/ld.so.conf`, `/etc/ld.so.conf.d/` | same |
 | Crontab | `/etc/crontab`, `/etc/cron.d/` | same |
 | User crontabs | `/var/spool/cron/crontabs/<user>` | `/var/spool/cron/<user>` |
-| Systemd units | `/etc/systemd/system/` | same |
+| Systemd units (admin) | `/etc/systemd/system/` | same |
+| Systemd units (packages) | `/usr/lib/systemd/system/` | same |
+| Systemd user units (all users) | `/etc/systemd/user/` | same |
+| Systemd user units (packages) | `/usr/lib/systemd/user/` | same |
+| Systemd per-user units | `~/.config/systemd/user/` | same |
 | Auth log | `/var/log/auth.log` | `/var/log/secure` |
 | System log | `/var/log/syslog` | `/var/log/messages` |
 | Kernel log | `/var/log/kern.log` | (included in messages) |

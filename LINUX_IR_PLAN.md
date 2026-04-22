@@ -261,22 +261,40 @@ grep -rE "(/tmp/|/dev/shm|base64|wget|curl|python|perl|bash -i)" \
 
 **Systemd services and timers**
 ```bash
-# All installed service units (system-wide)
-ls -la /mnt/linux_mount/etc/systemd/system/*.service 2>/dev/null
-ls -la /mnt/linux_mount/usr/lib/systemd/system/*.service 2>/dev/null
+# System-wide service units — /etc (admin/attacker) and /usr/lib (packages)
+ls -la /mnt/linux_mount/etc/systemd/system/*.service \
+        /mnt/linux_mount/usr/lib/systemd/system/*.service 2>/dev/null
 
-# All timer units (scheduled task equivalent)
-ls -la /mnt/linux_mount/etc/systemd/system/*.timer 2>/dev/null
+# Timer units — same two locations
+ls -la /mnt/linux_mount/etc/systemd/system/*.timer \
+        /mnt/linux_mount/usr/lib/systemd/system/*.timer 2>/dev/null
 
-# User-level systemd units
-find /mnt/linux_mount/home -path "*/.config/systemd/user/*.service" 2>/dev/null
+# System-wide user units (applied to all users; require root to create)
+ls -la /mnt/linux_mount/etc/systemd/user/ 2>/dev/null
+ls -la /mnt/linux_mount/usr/lib/systemd/user/ 2>/dev/null
+
+# Per-user units (any user; also check .timer and .socket)
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  \( -path "*/.config/systemd/user/*.service" \
+     -o -path "*/.config/systemd/user/*.timer" \
+     -o -path "*/.config/systemd/user/*.socket" \) 2>/dev/null
 
 # Inspect a suspicious service
 cat /mnt/linux_mount/etc/systemd/system/<service-name>.service
 
-# Red flags: ExecStart from /tmp, /dev/shm, home dirs, unusual binary paths
+# Red flags: scan all persistent unit locations
 grep -rE "ExecStart=.*(\/tmp\/|\/dev\/shm\/|\/home\/|base64|bash -i)" \
-  /mnt/linux_mount/etc/systemd/system/ 2>/dev/null
+  /mnt/linux_mount/etc/systemd/system/ \
+  /mnt/linux_mount/etc/systemd/user/ \
+  /mnt/linux_mount/usr/lib/systemd/system/ \
+  /mnt/linux_mount/usr/lib/systemd/user/ \
+  2>/dev/null
+
+# Red flags in per-user units
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -path "*/.config/systemd/user/*" \
+  \( -name "*.service" -o -name "*.timer" \) 2>/dev/null | \
+  xargs grep -lE "ExecStart=.*(\/tmp\/|\/dev\/shm\/|base64|bash -i)" 2>/dev/null
 ```
 
 **LD_PRELOAD / ld.so.preload (rootkit injection vector)**
@@ -452,8 +470,10 @@ sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
 
 # Systemd units
 sudo mkdir -p ./exports/systemd/
-sudo cp -r /mnt/linux_mount/etc/systemd/system ./exports/systemd/system/
-sudo find /mnt/linux_mount/home -path "*/.config/systemd" \
+sudo cp -rp /mnt/linux_mount/etc/systemd/system ./exports/systemd/etc_system/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/systemd/user   ./exports/systemd/etc_user/ 2>/dev/null
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -path "*/.config/systemd" \
   -exec cp --parents -r {} ./exports/systemd/ \; 2>/dev/null
 
 # Cron jobs
@@ -503,7 +523,11 @@ sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
 | LD_PRELOAD | `/etc/ld.so.preload` | same |
 | Crontab | `/etc/crontab`, `/etc/cron.d/` | same |
 | User crontabs | `/var/spool/cron/crontabs/` | `/var/spool/cron/` |
-| Systemd units | `/etc/systemd/system/` | same |
+| Systemd units (admin) | `/etc/systemd/system/` | same |
+| Systemd units (packages) | `/usr/lib/systemd/system/` | same |
+| Systemd user units (all users) | `/etc/systemd/user/` | same |
+| Systemd user units (packages) | `/usr/lib/systemd/user/` | same |
+| Systemd per-user units | `~/.config/systemd/user/` | same |
 | Auth log | `/var/log/auth.log` | `/var/log/secure` |
 | System log | `/var/log/syslog` | `/var/log/messages` |
 | Kernel log | `/var/log/kern.log` | included in `/var/log/messages` |
