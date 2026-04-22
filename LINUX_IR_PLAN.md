@@ -765,9 +765,9 @@ sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
 
 **Add ext4 notes:**
 - Root directory inode on ext4 is **inode 2** (not inode 5 as on NTFS)
-- `norecovery` is an NTFS-specific mount option; ext4 journal replay is controlled
-  differently — use `ro` alone for read-only ext4 mounts
-- Use `fls -f ext4` (or `ext3`, `xfs`) when forcing filesystem type
+- `norecovery` prevents journal replay on all journaled filesystems (NTFS, ext3/ext4, XFS);
+  use `ro,nosuid,noexec,nodev,norecovery` for evidence mounts of these types; Btrfs needs only `ro,nosuid,noexec,nodev`
+- Use `fls -f ext4` (or `ext3`) when forcing filesystem type; TSK does not support XFS
 
 ---
 
@@ -933,7 +933,7 @@ A Linux case needs different metadata fields than a Windows domain investigation
 sudo mkdir -p /mnt/ewf /mnt/linux_mount
 sudo ewfmount /cases/<case>/disk.E01 /mnt/ewf
 OFFSET=$(sudo mmls /mnt/ewf/ewf1 | awk '/Linux/{print $3; exit}')
-sudo mount -o ro,loop,offset=$((OFFSET*512)) /mnt/ewf/ewf1 /mnt/linux_mount
+sudo mount -o ro,loop,nosuid,noexec,nodev,norecovery,offset=$((OFFSET*512)) /mnt/ewf/ewf1 /mnt/linux_mount
 ```
 
 ### Key paths on this host

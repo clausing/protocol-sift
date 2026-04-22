@@ -127,11 +127,11 @@ ls /mnt/windows_mount/
 
 **If mount fails (filesystem dirty / hibernation):**
 ```bash
-# NTFS: add norecovery (prevents journal replay — preserves evidence state)
+# norecovery prevents journal replay — works for NTFS, ext3/ext4, and XFS
 sudo mount -o ro,loop,norecovery,offset=${OFFSET} /mnt/ewf/ewf1 /mnt/windows_mount
+sudo mount -o ro,loop,nosuid,noexec,nodev,norecovery,offset=${OFFSET} /mnt/ewf/ewf1 /mnt/linux_mount
 
-# ext4: dirty journal — add noload
-sudo mount -o ro,loop,noload,offset=${OFFSET} /mnt/ewf/ewf1 /mnt/linux_mount
+# Btrfs: ro alone is sufficient (no separate journal replay)
 ```
 
 ---
@@ -163,10 +163,12 @@ sudo lvdisplay       # full details including device path
 
 # Step 6: Mount the logical volume of interest (read-only)
 sudo mkdir -p /mnt/linux_mount
-sudo mount -o ro /dev/vgname/lvname /mnt/linux_mount
 
-# For XFS logical volumes:
-sudo mount -o ro,norecovery /dev/vgname/lvname /mnt/linux_mount
+# ext4 or XFS: norecovery prevents journal replay
+sudo mount -o ro,nosuid,noexec,nodev,norecovery /dev/vgname/lvname /mnt/linux_mount
+
+# Btrfs: ro alone is sufficient
+sudo mount -o ro,nosuid,noexec,nodev /dev/vgname/lvname /mnt/linux_mount
 
 # Cleanup (reverse order)
 sudo umount /mnt/linux_mount
@@ -188,7 +190,7 @@ rather than the actual root filesystem. The root OS is usually in subvolume `@`.
 
 ```bash
 # Mount at the top level first to list subvolumes
-sudo mount -o ro /dev/... /mnt/linux_mount
+sudo mount -o ro,nosuid,noexec,nodev /dev/... /mnt/linux_mount
 sudo btrfs subvolume list /mnt/linux_mount
 
 # Example output:
@@ -197,7 +199,7 @@ sudo btrfs subvolume list /mnt/linux_mount
 
 # Remount to the correct subvolume (usually @)
 sudo umount /mnt/linux_mount
-sudo mount -o ro,subvol=@ /dev/... /mnt/linux_mount
+sudo mount -o ro,nosuid,noexec,nodev,subvol=@ /dev/... /mnt/linux_mount
 ```
 
 ### 6. Filesystem Metadata
@@ -530,7 +532,7 @@ rpm --root=/mnt/linux_mount -qa \
 **ext4 / Linux filesystem notes:**
 - TSK tools (`fls`, `icat`, `mactime`, etc.) support **ext2/3/4 only** for Linux filesystems
 - Root directory inode on ext4 is **inode 2** (not inode 5 as on NTFS)
-- `norecovery` is NTFS-specific; for ext4 use `noload`; for XFS/Btrfs use `-o ro` alone
+- `norecovery` prevents journal replay on NTFS, ext3/ext4, and XFS; for Btrfs `-o ro` alone is sufficient
 - For XFS or Btrfs evidence: skip TSK filesystem navigation entirely — use Method B or C above
 - For LVM evidence: activate with `kpartx` + `vgchange -ay` before mounting (see LVM section)
 - For Btrfs: list subvolumes after initial mount and remount with `-o ro,subvol=@` if needed
@@ -620,7 +622,7 @@ sudo umount /mnt/ewf
 - Deleted files appear with a `*` prefix in `fls` output
 - Use `-o <sectors>` flag with all TSK tools when bypassing mount (more reliable than loopback)
 - `img_stat` before `mmls` catches 4K sector drives — wrong sector size = wrong byte offset
-- `norecovery` mount option prevents NTFS journal replay that could alter analysis
+- `norecovery` prevents journal replay on NTFS, ext3/ext4, and XFS — always use with `-o ro` for evidence mounts of these types
 - `icat` is preferred over `cp` for extracting files — bypasses OS file locking and VSS
 - The bodyfile from `fls` can be fed directly to `log2timeline.py` as an input source
 - VSS (Volume Shadow Copies) can be mounted: use `mmls` on VSS metadata and `icat` with offsets

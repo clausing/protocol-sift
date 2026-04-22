@@ -52,23 +52,21 @@ sudo blkid -o value -s TYPE --offset $((OFFSET * 512)) /mnt/ewf/ewf1
 
 **ext4 (simple partition):**
 ```bash
-sudo mount -o ro,loop,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
-# If dirty journal: add noload
-# sudo mount -o ro,loop,noload,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
+sudo mount -o ro,loop,nosuid,noexec,nodev,norecovery,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
 ```
 
 **XFS (simple partition — no TSK filesystem tools available):**
 ```bash
-sudo mount -o ro,loop,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
+sudo mount -o ro,loop,nosuid,noexec,nodev,norecovery,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
 # Use mounted path + find/Plaso for timeline; skip fls/icat/mactime
 ```
 
 **Btrfs (check subvolumes after initial mount):**
 ```bash
-sudo mount -o ro,loop,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
+sudo mount -o ro,loop,nosuid,noexec,nodev,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
 sudo btrfs subvolume list /mnt/linux_mount   # usually shows @ as root subvol
 sudo umount /mnt/linux_mount
-sudo mount -o ro,loop,subvol=@,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
+sudo mount -o ro,loop,nosuid,noexec,nodev,subvol=@,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
 ```
 
 **LVM (when blkid returns LVM2_member):**
@@ -78,7 +76,8 @@ sudo kpartx -av "$LOOP"            # creates /dev/mapper/loopXpY devices
 sudo pvscan && sudo vgscan
 sudo vgchange -ay                  # activate volume group(s)
 sudo lvs                           # list logical volumes + VG names
-sudo mount -o ro /dev/vgname/lvname /mnt/linux_mount
+sudo mount -o ro,nosuid,noexec,nodev,norecovery /dev/vgname/lvname /mnt/linux_mount  # ext4, XFS
+# sudo mount -o ro,nosuid,noexec,nodev /dev/vgname/lvname /mnt/linux_mount            # Btrfs only
 
 # Cleanup
 sudo umount /mnt/linux_mount
