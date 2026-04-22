@@ -12,8 +12,7 @@ Format). Always mount read-only to preserve evidence integrity.
 > For Linux evidence on XFS, Btrfs, or LVM:
 > - `ewfmount`, `mmls`, `ewfinfo`, `ewfverify`, `bulk_extractor`, and file carving still work
 > - Mount the image and work from `/mnt/linux_mount/` using native Linux tools and Plaso
-> - See the **LVM Activation** and **XFS / Btrfs** sections below for mount workflows
-> - See `@~/.claude/skills/linux-artifacts/SKILL.md` for artifact extraction from the mounted path
+> - See `@~/.claude/skills/linux-artifacts/SKILL.md` for mount procedures and artifact extraction
 
 ---
 
@@ -104,7 +103,7 @@ Example output (512-byte sectors):
 
 **LVM detection:** If `mmls` shows a partition type of `Linux LVM` (MBR type `0x8e`)
 or GPT GUID `E6D6D379-F507-44C2-A23C-238F2A3DF928`, do not proceed to Step 5 below —
-go to **LVM Activation** instead. Mounting an LVM PV directly will fail.
+see `@~/.claude/skills/linux-artifacts/SKILL.md` (Mount Procedures) instead. Mounting an LVM PV directly will fail.
 
 ```bash
 # Identify filesystem type without mounting (works for non-LVM partitions)
@@ -139,8 +138,7 @@ sudo mount -o ro,loop,nosuid,noexec,nodev,norecovery,offset=${OFFSET} /mnt/ewf/e
 ### LVM / Btrfs (Linux evidence — cross-reference)
 
 TSK cannot read inside LVM; Btrfs requires subvolume selection after the initial mount.
-For both, see `@~/.claude/case-templates/linux-CLAUDE.md` (mount commands) and
-`@~/.claude/skills/linux-artifacts/SKILL.md` (artifact workflow).
+See `@~/.claude/skills/linux-artifacts/SKILL.md` (Mount Procedures section) for both.
 
 ### 6. Filesystem Metadata
 
@@ -397,7 +395,7 @@ extraction workflow (accounts, logs, journal, shell histories, persistence, stag
 - TSK tools (`fls`, `icat`, `mactime`, etc.) support **ext2/3/4 only** for Linux filesystems
 - Root directory inode on ext4 is **inode 2** (not inode 5 as on NTFS)
 - `norecovery` prevents journal replay on NTFS, ext3/ext4, and XFS; Btrfs: `-o ro` only
-- For XFS, Btrfs, or LVM: see `@~/.claude/case-templates/linux-CLAUDE.md` and `@~/.claude/skills/linux-artifacts/SKILL.md`
+- For XFS, Btrfs, or LVM: see `@~/.claude/skills/linux-artifacts/SKILL.md` (Mount Procedures section)
 
 ---
 

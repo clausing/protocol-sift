@@ -6,8 +6,9 @@ Covers authentication logs, systemd journal, auditd, shell history, persistence
 mechanisms, rootkit indicators, and artifact extraction from Linux disk images.
 
 > **Evidence mount assumption:** Commands below use `/mnt/linux_mount` as the
-> read-only mount point for the target Linux filesystem. See
-> `@~/.claude/skills/sleuthkit/SKILL.md` for mount procedures.
+> read-only mount point for the target Linux filesystem. For ext4/XFS/Btrfs/LVM
+> mount procedures, see the **Mount Procedures** section below. For `ewfmount`
+> and `mmls`, see `@~/.claude/skills/sleuthkit/SKILL.md`.
 
 ---
 
@@ -36,11 +37,56 @@ df -Th /mnt/linux_mount
 | `ext4` / `ext3` | Standard mount (`-o ro,loop,offset=...`); TSK tools available |
 | `xfs` | Standard mount; **no TSK filesystem tools** — use mounted path + find/Plaso |
 | `btrfs` | Mount, list subvolumes, remount with `-o ro,subvol=@`; **no TSK tools** |
-| `LVM2_member` | LVM activation required — see `@~/.claude/skills/sleuthkit/SKILL.md` |
+| `LVM2_member` | LVM activation required — see **Mount Procedures** section below |
 
 For XFS and Btrfs, all artifact extraction commands in this skill file work as-is
 because they target `/mnt/linux_mount/` paths. Only TSK-based filesystem navigation
 (`fls`, `icat`, `mactime` via bodyfile) is unavailable.
+
+---
+
+## Mount Procedures (Linux)
+
+> After `ewfmount` surfaces the raw image. `ewfmount` + `mmls` commands are in
+> `@~/.claude/skills/sleuthkit/SKILL.md`.
+
+```bash
+sudo mkdir -p /mnt/ewf /mnt/linux_mount
+sudo ewfmount /cases/<case>/disk.E01 /mnt/ewf/
+OFFSET=$(sudo mmls /mnt/ewf/ewf1 | awk '/Linux/{print $3; exit}')
+sudo blkid -o value -s TYPE --offset $((OFFSET * 512)) /mnt/ewf/ewf1
+```
+
+**ext4 or XFS (simple partition):**
+```bash
+sudo mount -o ro,loop,nosuid,noexec,nodev,norecovery,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
+```
+
+**Btrfs (check subvolumes after initial mount):**
+```bash
+sudo mount -o ro,loop,nosuid,noexec,nodev,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
+sudo btrfs subvolume list /mnt/linux_mount   # usually shows @ as root subvol
+sudo umount /mnt/linux_mount
+sudo mount -o ro,loop,nosuid,noexec,nodev,subvol=@,offset=$((OFFSET * 512)) /mnt/ewf/ewf1 /mnt/linux_mount
+```
+
+**LVM (when `blkid` returns `LVM2_member`):**
+```bash
+LOOP=$(sudo losetup -f --show /mnt/ewf/ewf1)
+sudo kpartx -av "$LOOP"            # creates /dev/mapper/loopXpY devices
+sudo pvscan && sudo vgscan
+sudo vgchange -ay                  # activate volume group(s)
+sudo lvs                           # list logical volumes + VG names
+sudo mount -o ro,nosuid,noexec,nodev,norecovery /dev/vgname/lvname /mnt/linux_mount  # ext4, XFS
+# sudo mount -o ro,nosuid,noexec,nodev /dev/vgname/lvname /mnt/linux_mount           # Btrfs only
+
+# Cleanup
+sudo umount /mnt/linux_mount
+sudo vgchange -an vgname
+sudo kpartx -dv "$LOOP"
+sudo losetup -d "$LOOP"
+sudo umount /mnt/ewf
+```
 
 ---
 
