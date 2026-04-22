@@ -499,7 +499,7 @@ sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
 | Password hashes | `/etc/shadow` | same |
 | Sudoers | `/etc/sudoers`, `/etc/sudoers.d/` | same |
 | SSH authorized keys | `~/.ssh/authorized_keys` | same |
-| SSH server config | `/etc/ssh/sshd_config` | same |
+| SSH server config | `/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/` | same |
 | LD_PRELOAD | `/etc/ld.so.preload` | same |
 | Crontab | `/etc/crontab`, `/etc/cron.d/` | same |
 | User crontabs | `/var/spool/cron/crontabs/` | `/var/spool/cron/` |
@@ -770,6 +770,7 @@ has Windows paths). Key extractions:
 sudo find /mnt/linux_mount/etc -type f \
   \( -name "passwd" -o -name "shadow" -o -name "sudoers" \
      -o -name "crontab" -o -name "sshd_config" \
+     -o -path "*/sshd_config.d/*" \
      -o -name "ld.so.preload" \) \
   -exec cp --parents {} ./exports/etc/ \; 2>/dev/null
 

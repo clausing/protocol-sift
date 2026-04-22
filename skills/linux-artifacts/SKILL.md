@@ -798,7 +798,7 @@ rpm --root=/mnt/linux_mount -qa \
 | Password hashes | `/etc/shadow` | same |
 | Group memberships | `/etc/group` | same |
 | Sudoers | `/etc/sudoers`, `/etc/sudoers.d/` | same |
-| SSH server config | `/etc/ssh/sshd_config` | same |
+| SSH server config | `/etc/ssh/sshd_config`, `/etc/ssh/sshd_config.d/` | same |
 | SSH authorized keys | `~/.ssh/authorized_keys` | same |
 | LD_PRELOAD rootkit | `/etc/ld.so.preload` | same |
 | Library paths | `/etc/ld.so.conf`, `/etc/ld.so.conf.d/` | same |
