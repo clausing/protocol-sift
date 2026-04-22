@@ -237,7 +237,7 @@ image_export.py \
 | `--storage-file <file>` | Output .plaso storage file path |
 | `--parsers <set>` | Parser preset or comma-separated list |
 | `--hashers md5,sha256` | Hash all processed files |
-| `--timezone UTC` | Always use UTC |
+| `--timezone <tz>` | Timezone for log sources that lack timezone info (e.g. syslog); use host's local TZ for Linux, UTC for Windows |
 | `--vss-stores all` | Process all Volume Shadow Copies |
 | `--vss-stores 1,2` | Process specific VSS store numbers |
 | `--single-process` | Debug mode — slower, better error messages |
@@ -256,14 +256,23 @@ image_export.py \
 
 ## Linux Timeline Workflow
 
+> **Timezone note:** syslog, auth.log, messages, and cron logs use the host's **local
+> time** — set `--timezone` to the host's configured timezone (from `/etc/timezone` or
+> the `/etc/localtime` symlink target), not UTC. Plaso uses this to normalise ambiguous
+> timestamps to UTC internally. `systemd_journal` and `mactime` bodyfiles are
+> epoch/UTC-based and always use `--timezone UTC`.
+
 ### Full Linux Image Ingest
 
 ```bash
+# HOST_TZ: read from /mnt/linux_mount/etc/timezone or ls -la /mnt/linux_mount/etc/localtime
+HOST_TZ=$(cat /mnt/linux_mount/etc/timezone 2>/dev/null || echo "UTC")
+
 log2timeline.py \
   --storage-file ./analysis/<CASE_ID>_linux.plaso \
   --parsers linux \
   --hashers md5 \
-  --timezone UTC \
+  --timezone "${HOST_TZ}" \
   /mnt/linux_mount/
 ```
 
@@ -290,17 +299,17 @@ log2timeline.py \
 log2timeline.py \
   --storage-file ./analysis/<CASE_ID>_logs.plaso \
   --parsers linux \
-  --timezone UTC \
+  --timezone "${HOST_TZ}" \
   /mnt/linux_mount/var/log/
 
-# Systemd journal (separate parser — not included in linux preset)
+# Systemd journal (epoch-based — always UTC regardless of host timezone)
 log2timeline.py \
   --storage-file ./analysis/<CASE_ID>_journal.plaso \
   --parsers systemd_journal \
   --timezone UTC \
   ./exports/journal/
 
-# Filesystem MAC times (from fls bodyfile — pairs with linux log ingest)
+# Filesystem MAC times (epoch-based — always UTC)
 log2timeline.py \
   --storage-file ./analysis/<CASE_ID>_fls.plaso \
   --parsers mactime \

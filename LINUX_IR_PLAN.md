@@ -694,22 +694,26 @@ vol -f <image.img> linux.malfind --dump --output-dir ./exports/malfind/
 **2. Add a "Linux Timeline Workflow" section** with worked examples:
 
 ```bash
+# HOST_TZ: syslog/auth.log use local time — must match host's configured timezone
+# (systemd_journal and mactime are epoch-based; always use UTC for those)
+HOST_TZ=$(cat /mnt/linux_mount/etc/timezone 2>/dev/null || echo "UTC")
+
 # Full Linux image ingest
 log2timeline.py \
   --storage-file ./analysis/<CASE_ID>_linux.plaso \
   --parsers linux \
   --hashers md5 \
-  --timezone UTC \
+  --timezone "${HOST_TZ}" \
   /mnt/linux_mount/
 
 # Targeted: just logs directory (fast — avoids parsing entire filesystem)
 log2timeline.py \
   --storage-file ./analysis/<CASE_ID>_logs.plaso \
   --parsers linux \
-  --timezone UTC \
+  --timezone "${HOST_TZ}" \
   /mnt/linux_mount/var/log/
 
-# Parse offline systemd journal
+# Parse offline systemd journal (epoch-based — always UTC)
 log2timeline.py \
   --storage-file ./analysis/<CASE_ID>_journal.plaso \
   --parsers systemd_journal \
