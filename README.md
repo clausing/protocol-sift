@@ -210,38 +210,42 @@ reads the skill file at task time — you do not need to invoke them manually.
 
 ---
 
-### (9) case-templates/CLAUDE.md → `/cases/<casename>/CLAUDE.md`
+### (10–11) case-templates/ → `/cases/<casename>/CLAUDE.md`
 
-**What it is:** A per-case project CLAUDE.md. When you `cd /cases/<casename>` and
-launch `claude`, this file is loaded automatically as project-level instructions,
+**What they are:** Per-case project CLAUDE.md files. When you `cd /cases/<casename>`
+and launch `claude`, this file loads automatically as project-level instructions,
 layered on top of the global `~/.claude/CLAUDE.md`.
+
+Two templates are provided — pick the one that matches your **evidence OS**:
+
+| Template | Evidence OS | Key additions |
+|----------|-------------|---------------|
+| `CLAUDE.md` | Windows | EZ Tools paths, NTFS/Registry/EVTX commands, VSS workflow |
+| `linux-CLAUDE.md` | Linux | Filesystem type detection, LVM/Btrfs mount, journal/auditd, persistence |
 
 **Install for a new case:**
 
-If you used the installer (`install.sh` or the curl one-liner), the template is already
-at `~/.claude/case-templates/CLAUDE.md`:
 ```bash
 mkdir -p /cases/<CASENAME>
+
+# Windows evidence:
 cp ~/.claude/case-templates/CLAUDE.md /cases/<CASENAME>/CLAUDE.md
+
+# Linux evidence:
+cp ~/.claude/case-templates/linux-CLAUDE.md /cases/<CASENAME>/CLAUDE.md
 ```
 
-If you have the repo or archive available, copy from there instead:
-```bash
-mkdir -p /cases/<CASENAME>
-cp case-templates/CLAUDE.md /cases/<CASENAME>/CLAUDE.md
-```
+If you have the repo or archive available, copy from `case-templates/` directly instead
+of `~/.claude/case-templates/`.
 
 **Required customisations for each new case:**
-1. Update `## Case Overview` — client name, domain, threat actor, incident date, role
+1. Update `## Case Overview` — client name, host/domain, OS, threat actor, incident date, role
 2. Update `## Evidence Files` — list all E01/img files with their system/role
 3. Update `## Common Commands` — adjust image paths and filenames
 4. Update `## Network Topology` — subnet map for the specific engagement
-5. Update `## Domain Accounts` — DA and service accounts discovered
+5. Update `## Domain Accounts` / `## Key Accounts` — DA, service accounts, or local accounts discovered
 6. Update `## Known IOCs` — populate as artifacts are confirmed
 7. Update `## Incident Timeline` — build out as analysis progresses
-
-The template as shipped reflects the SRL FOR508 lab scenario. Strip the SRL-specific
-content and fill in new case details before use.
 
 ---
 
@@ -338,7 +342,10 @@ pip3 install weasyprint
 echo "Done. Start a new case with:"
 echo "  export CASE=CLIENT-IR-2025-001"
 echo "  mkdir -p /cases/\${CASE}/{analysis,exports,reports}"
+echo "  # Windows evidence:"
 echo "  cp ~/.claude/case-templates/CLAUDE.md /cases/\${CASE}/CLAUDE.md"
+echo "  # Linux evidence:"
+echo "  # cp ~/.claude/case-templates/linux-CLAUDE.md /cases/\${CASE}/CLAUDE.md"
 echo "  cp ~/.claude/analysis-scripts/generate_pdf_report.py /cases/\${CASE}/analysis/"
 echo "  nano /cases/\${CASE}/CLAUDE.md"
 echo "  cd /cases/\${CASE} && claude"
@@ -373,10 +380,10 @@ and are ready to copy into any new case directory — no need to keep the repo a
 export CASE=CLIENT-IR-2025-001
 mkdir -p /cases/${CASE}/{analysis,exports,reports}
 
-# Windows case:
+# Copy the template that matches your evidence OS:
+#   Windows evidence:
 cp ~/.claude/case-templates/CLAUDE.md /cases/${CASE}/CLAUDE.md
-
-# Linux case:
+#   Linux evidence (use instead of the line above):
 # cp ~/.claude/case-templates/linux-CLAUDE.md /cases/${CASE}/CLAUDE.md
 
 cp ~/.claude/analysis-scripts/generate_pdf_report.py /cases/${CASE}/analysis/
