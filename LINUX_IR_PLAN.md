@@ -608,27 +608,47 @@ for each specific kernel version.
 ```bash
 # Check if a pre-built ISF already exists for the target kernel
 ls /opt/volatility3-*/volatility3/symbols/linux/
+```
 
-# Determine the kernel version of the suspect image
-vol -f <image.img> linux.info 2>&1 | head -20
+**Priority order for ISF generation:**
 
-# Install dwarf2json (if not already available on SIFT)
-# Download from: https://github.com/volatilityfoundation/dwarf2json
+**Option 1 — Pre-built symbols (try first):**
+```bash
+# https://github.com/Abyss-W4tcher/volatility3-symbols
+# Covers common Ubuntu / Debian / CentOS / RHEL kernels
+```
 
-# Get the exact kernel version from the image (from /proc/version or uname output)
-# Then install the matching debug package on the SIFT workstation:
+**Option 2 — btf2json (preferred for kernels ≥ 5.2):**
+BTF is embedded in the kernel binary — no debug package needed. Available when
+`CONFIG_DEBUG_INFO_BTF=y` (default on Ubuntu 20.04+, Debian 11+, RHEL 8.3+).
+```bash
+# Confirm BTF is present in the target kernel
+grep CONFIG_DEBUG_INFO_BTF /mnt/linux_mount/boot/config-<kernel-version>
+# or: readelf -S /path/to/vmlinux | grep -i ' \.BTF'
+
+# vmlinuz is compressed — extract uncompressed kernel first
+# (extract-vmlinux is in the kernel-source or linux-headers package)
+/usr/src/linux-headers-$(uname -r)/scripts/extract-vmlinux \
+  /mnt/linux_mount/boot/vmlinuz-<kernel-version> > /tmp/vmlinux
+
+# Generate ISF (verify exact flags from: https://github.com/volatilityfoundation/btf2json)
+btf2json linux --elf /tmp/vmlinux \
+  > /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel-version>.json
+xz /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel-version>.json
+```
+
+**Option 3 — dwarf2json (fallback for older kernels without BTF):**
+Requires the debug kernel package for the exact kernel version.
+```bash
+# Debian/Ubuntu
 sudo apt install linux-image-<exact-kernel-version>-dbg
+# RHEL/CentOS
+sudo yum install kernel-debuginfo-<exact-kernel-version>
 
-# Generate ISF from the debug kernel
 dwarf2json linux \
   --elf /usr/lib/debug/boot/vmlinux-<exact-kernel-version> \
   > /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel-version>.json
-
-# Compress (Volatility 3 supports .json.xz natively)
 xz /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel-version>.json
-
-# Pre-built ISF files (community-maintained, covers common Ubuntu/Debian/CentOS kernels):
-# https://github.com/Abyss-W4tcher/volatility3-symbols
 ```
 
 #### Linux Plugin Reference
@@ -735,7 +755,8 @@ vol -f <image.img> linux.malfind --dump --output-dir ./exports/malfind/
 | **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Rootkit detection |
 | **last / lastb** | `last -F -f <wtmp>` / `lastb -F -f <btmp>` | Login history |
 | **lsmod** | `lsmod` | Kernel module listing (live system) |
-| **dwarf2json** | `dwarf2json linux --elf <vmlinux>` | Generate Volatility Linux ISF |
+| **btf2json** | `btf2json linux --elf <vmlinux>` | Generate Volatility Linux ISF (kernels ≥ 5.2, no debug pkg needed) |
+| **dwarf2json** | `dwarf2json linux --elf <vmlinux>` | Generate Volatility Linux ISF (fallback for older kernels) |
 
 **3. Add note about Linux symbol requirements** after the Vol3 tool path entry.
 

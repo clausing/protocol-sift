@@ -129,9 +129,11 @@ $VOL -f $IMG linux.bash | tee ./exports/memory_bash_history.txt
 $VOL -f $IMG linux.netstat | tee ./exports/memory_netstat.txt
 ```
 
-> **Symbol table:** Volatility 3 Linux requires a per-kernel ISF file. If not
-> pre-installed, generate with `dwarf2json` from the kernel debug package, or
-> source from https://github.com/Abyss-W4tcher/volatility3-symbols
+> **Symbol table:** Volatility 3 Linux requires a per-kernel ISF file.
+> Priority: (1) pre-built from https://github.com/Abyss-W4tcher/volatility3-symbols;
+> (2) `btf2json` from the kernel's embedded BTF data (kernels ≥ 5.2, no debug package needed);
+> (3) `dwarf2json` from the kernel debug package (fallback for older kernels).
+> See `LINUX_IR_PLAN.md` § Linux Symbol Requirements for commands.
 
 ### Linux artifact extraction
 
