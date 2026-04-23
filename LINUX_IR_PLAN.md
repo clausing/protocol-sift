@@ -352,14 +352,22 @@ grep -r "^install" /mnt/linux_mount/etc/modprobe.d/ 2>/dev/null
 # System-wide RC files
 cat /mnt/linux_mount/etc/profile
 ls /mnt/linux_mount/etc/profile.d/
-cat /mnt/linux_mount/etc/bash.bashrc 2>/dev/null
+cat /mnt/linux_mount/etc/bash.bashrc 2>/dev/null        # Debian/Ubuntu
+cat /mnt/linux_mount/etc/bashrc 2>/dev/null             # RHEL/CentOS
+cat /mnt/linux_mount/etc/zshenv 2>/dev/null             # all zsh invocations (highest risk)
+cat /mnt/linux_mount/etc/zprofile 2>/dev/null
+cat /mnt/linux_mount/etc/zshrc 2>/dev/null
+cat /mnt/linux_mount/etc/fish/config.fish 2>/dev/null
+cat /mnt/linux_mount/etc/fish/conf.d/*.fish 2>/dev/null
 
 # Per-user RC files
 for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
-  for rc in .bashrc .bash_profile .profile .zshrc; do
+  for rc in .bashrc .bash_profile .profile .zshenv .zprofile .zshrc .zlogin; do
     f="$user_home/$rc"
     [ -f "$f" ] && echo "=== $f ===" && cat "$f"
   done
+  f="$user_home/.config/fish/config.fish"
+  [ -f "$f" ] && echo "=== $f ===" && cat "$f"
 done
 
 # Red flags: curl/wget downloads, base64 decodes, reverse shells

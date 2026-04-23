@@ -575,14 +575,27 @@ persistence location.
 # System-wide shell configuration
 cat /mnt/linux_mount/etc/profile
 cat /mnt/linux_mount/etc/profile.d/*.sh 2>/dev/null
-cat /mnt/linux_mount/etc/bash.bashrc 2>/dev/null
+cat /mnt/linux_mount/etc/bash.bashrc 2>/dev/null        # Debian/Ubuntu
+cat /mnt/linux_mount/etc/bashrc 2>/dev/null             # RHEL/CentOS
+
+# zsh global configs (/etc/zshenv runs for ALL zsh invocations — highest persistence risk)
+cat /mnt/linux_mount/etc/zshenv 2>/dev/null
+cat /mnt/linux_mount/etc/zprofile 2>/dev/null
+cat /mnt/linux_mount/etc/zshrc 2>/dev/null
+
+# fish global configs
+cat /mnt/linux_mount/etc/fish/config.fish 2>/dev/null
+cat /mnt/linux_mount/etc/fish/conf.d/*.fish 2>/dev/null
 
 # Per-user RC files
 for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
-    for rc in .bashrc .bash_profile .profile .zshrc .zprofile; do
+    for rc in .bashrc .bash_profile .profile .zshenv .zprofile .zshrc .zlogin; do
         f="${user_home}/${rc}"
         [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
     done
+    # fish per-user config lives in a subdirectory
+    f="${user_home}/.config/fish/config.fish"
+    [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
 done | tee ./exports/shell_rc_all.txt
 
 # Red flags
@@ -825,6 +838,12 @@ sudo cp -rp /mnt/linux_mount/etc/cron.d     ./exports/etc/ 2>/dev/null
 sudo cp -rp /mnt/linux_mount/etc/systemd    ./exports/etc/ 2>/dev/null
 sudo cp -rp /mnt/linux_mount/etc/profile.d  ./exports/etc/ 2>/dev/null
 sudo cp -p  /mnt/linux_mount/etc/profile    ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/bash.bashrc ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/bashrc      ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/zshenv      ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/zprofile    ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/zshrc       ./exports/etc/ 2>/dev/null
+sudo cp -rp /mnt/linux_mount/etc/fish        ./exports/etc/ 2>/dev/null
 
 # Logs (full /var/log)
 sudo mkdir -p ./exports/logs/
