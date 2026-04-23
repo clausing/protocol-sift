@@ -621,18 +621,21 @@ ls /opt/volatility3-*/volatility3/symbols/linux/
 **Option 2 — btf2json (preferred for kernels ≥ 5.2):**
 BTF is embedded in the kernel binary — no debug package needed. Available when
 `CONFIG_DEBUG_INFO_BTF=y` (default on Ubuntu 20.04+, Debian 11+, RHEL 8.3+).
+Tool: https://github.com/vobst/btf2json
 ```bash
 # Confirm BTF is present in the target kernel
 grep CONFIG_DEBUG_INFO_BTF /mnt/linux_mount/boot/config-<kernel-version>
-# or: readelf -S /path/to/vmlinux | grep -i ' \.BTF'
+
+# Collect System.map from the target boot partition
+cp /mnt/linux_mount/boot/System.map-<kernel-version> /tmp/
 
 # vmlinuz is compressed — extract uncompressed kernel first
-# (extract-vmlinux is in the kernel-source or linux-headers package)
+# (extract-vmlinux script is in linux-headers or kernel-source package)
 /usr/src/linux-headers-$(uname -r)/scripts/extract-vmlinux \
   /mnt/linux_mount/boot/vmlinuz-<kernel-version> > /tmp/vmlinux
 
-# Generate ISF (verify exact flags from: https://github.com/volatilityfoundation/btf2json)
-btf2json linux --elf /tmp/vmlinux \
+# Generate ISF (outputs to stdout)
+btf2json --btf /tmp/vmlinux --map /tmp/System.map-<kernel-version> \
   > /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel-version>.json
 xz /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel-version>.json
 ```
@@ -755,7 +758,7 @@ vol -f <image.img> linux.malfind --dump --output-dir ./exports/malfind/
 | **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Rootkit detection |
 | **last / lastb** | `last -F -f <wtmp>` / `lastb -F -f <btmp>` | Login history |
 | **lsmod** | `lsmod` | Kernel module listing (live system) |
-| **btf2json** | `btf2json linux --elf <vmlinux>` | Generate Volatility Linux ISF (kernels ≥ 5.2, no debug pkg needed) |
+| **btf2json** | `btf2json --btf <vmlinux> --map System.map` | Generate Volatility Linux ISF (kernels ≥ 5.2, no debug pkg needed) |
 | **dwarf2json** | `dwarf2json linux --elf <vmlinux>` | Generate Volatility Linux ISF (fallback for older kernels) |
 
 **3. Add note about Linux symbol requirements** after the Vol3 tool path entry.
