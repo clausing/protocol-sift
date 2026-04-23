@@ -167,11 +167,12 @@ Corporate Linux hosts are often AD-joined. Domain accounts do **not** appear in
 
 Three integration methods:
 
-| Method | Config | Users appear as |
-|--------|--------|----------------|
-| SSSD (on-prem AD) | `/etc/sssd/sssd.conf` | `user@domain.corp` |
-| winbind (Samba) | `/etc/samba/smb.conf` | `DOMAIN\user` |
-| Azure AD / Entra ID (`aadsshlogin`) | `/etc/aad.conf` | `user@tenant.onmicrosoft.com` |
+| Method | Config | PAM module | Users appear as |
+|--------|--------|------------|----------------|
+| SSSD (on-prem AD) | `/etc/sssd/sssd.conf` | `pam_sss.so` | `user@domain.corp` |
+| winbind (Samba) | `/etc/samba/smb.conf` | `pam_winbind.so` | `DOMAIN\user` |
+| Azure AD — Microsoft `aadsshlogin` | `/etc/aadpasswd` (NSS cache) | `aad_ssh.so` | `user@tenant.onmicrosoft.com` |
+| Azure AD — Canonical `aad-auth` (Ubuntu) | `/etc/aad.conf` | `pam_aad.so` | `user@tenant.onmicrosoft.com` |
 
 ```bash
 # --- Determine join method ---
@@ -181,11 +182,16 @@ cat /mnt/linux_mount/etc/realmd.conf 2>/dev/null
 cat /mnt/linux_mount/etc/krb5.conf 2>/dev/null
 grep -E "workgroup|realm|security" \
   /mnt/linux_mount/etc/samba/smb.conf 2>/dev/null
-cat /mnt/linux_mount/etc/aad.conf 2>/dev/null              # Azure AD join
+
+# Azure AD — Microsoft aadsshlogin: /etc/aadpasswd is NSS cache of AAD users
+cat /mnt/linux_mount/etc/aadpasswd 2>/dev/null
+# Azure AD — Canonical aad-auth (Ubuntu): tenant config + offline cache
+cat /mnt/linux_mount/etc/aad.conf 2>/dev/null
+ls  /mnt/linux_mount/var/lib/aad/cache/ 2>/dev/null
 
 # --- PAM wiring (confirms auth is routed through domain) ---
-# pam_sss = SSSD; aad_ssh = Azure AD SSH login
-grep -rl "pam_sss\|aad_ssh" /mnt/linux_mount/etc/pam.d/ 2>/dev/null
+# pam_sss=SSSD  aad_ssh=MS aadsshlogin  pam_aad=Canonical aad-auth  pam_winbind=winbind
+grep -rl "pam_sss\|aad_ssh\|pam_aad\|pam_winbind" /mnt/linux_mount/etc/pam.d/ 2>/dev/null
 
 # --- SSSD domain auth logs ---
 sudo mkdir -p ./exports/sssd/
@@ -198,12 +204,13 @@ grep -iE "(auth|fail|success|pam)" \
 last -F -f /mnt/linux_mount/var/log/wtmp | grep -v "^reboot\|^wtmp" | head -30
 
 # auth.log / secure: SSSD and Azure AD auth events
-grep -iE "sssd|pam_sss|aad_ssh|krb5|Accepted.*@" \
+grep -iE "sssd|pam_sss|aad_ssh|pam_aad|krb5|Accepted.*@" \
   /mnt/linux_mount/var/log/auth.log \
   /mnt/linux_mount/var/log/secure 2>/dev/null | head -30
 
-# --- Cached credentials (AD users who have previously logged in) ---
-ls /mnt/linux_mount/var/lib/sss/db/ 2>/dev/null
+# --- Cached credentials ---
+ls /mnt/linux_mount/var/lib/sss/db/ 2>/dev/null         # SSSD credential cache
+ls /mnt/linux_mount/var/lib/aad/cache/ 2>/dev/null       # Canonical aad-auth cache
 ```
 
 ---
@@ -893,7 +900,8 @@ sudo cp -rp /mnt/linux_mount/etc/fish        ./exports/etc/ 2>/dev/null
 sudo cp -rp /mnt/linux_mount/etc/sssd        ./exports/etc/ 2>/dev/null
 sudo cp -p  /mnt/linux_mount/etc/krb5.conf   ./exports/etc/ 2>/dev/null
 sudo cp -p  /mnt/linux_mount/etc/realmd.conf ./exports/etc/ 2>/dev/null
-sudo cp -p  /mnt/linux_mount/etc/aad.conf    ./exports/etc/ 2>/dev/null
+sudo cp -p  /mnt/linux_mount/etc/aad.conf    ./exports/etc/ 2>/dev/null   # Canonical aad-auth
+sudo cp -p  /mnt/linux_mount/etc/aadpasswd   ./exports/etc/ 2>/dev/null   # MS aadsshlogin NSS cache
 sudo cp -rp /mnt/linux_mount/var/log/sssd    ./exports/sssd/ 2>/dev/null
 
 # Logs (full /var/log)

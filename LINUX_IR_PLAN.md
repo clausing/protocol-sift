@@ -83,7 +83,9 @@ grep -rE "(ALL|NOPASSWD)" /mnt/linux_mount/etc/sudoers \
 cat /mnt/linux_mount/etc/sssd/sssd.conf 2>/dev/null   # SSSD (on-prem AD)
 cat /mnt/linux_mount/etc/aad.conf 2>/dev/null          # Azure AD / Entra ID
 cat /mnt/linux_mount/etc/krb5.conf 2>/dev/null
-grep -rl "pam_sss\|aad_ssh" /mnt/linux_mount/etc/pam.d/ 2>/dev/null
+grep -rl "pam_sss\|aad_ssh\|pam_aad\|pam_winbind" /mnt/linux_mount/etc/pam.d/ 2>/dev/null
+cat /mnt/linux_mount/etc/aadpasswd 2>/dev/null     # MS aadsshlogin: NSS cache of AAD users
+cat /mnt/linux_mount/etc/aad.conf 2>/dev/null      # Canonical aad-auth: tenant config
 ```
 
 #### 3. Authentication Log Analysis
