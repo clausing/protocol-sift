@@ -60,6 +60,11 @@ Key files to extract and examine:
 - `/etc/sudoers` and `/etc/sudoers.d/` — privilege escalation paths
 - `~/.ssh/authorized_keys` for all users — backdoor key implantation
 
+> **Domain-joined hosts:** Domain accounts (AD via SSSD/winbind, or Azure AD via
+> `aadsshlogin`) do NOT appear in `/etc/passwd`. Look for them in wtmp, auth.log,
+> and `/var/log/sssd/`. Check `/etc/sssd/sssd.conf`, `/etc/aad.conf`, and PAM for
+> `pam_sss` / `aad_ssh.so`.
+
 ```bash
 # Find all UID 0 accounts (should only be root)
 awk -F: '$3 == 0 {print $1}' /mnt/linux_mount/etc/passwd
@@ -73,6 +78,12 @@ find /mnt/linux_mount/home /mnt/linux_mount/root -name "authorized_keys" 2>/dev/
 # Check sudoers for ALL / NOPASSWD grants
 grep -rE "(ALL|NOPASSWD)" /mnt/linux_mount/etc/sudoers \
   /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null
+
+# Domain join detection
+cat /mnt/linux_mount/etc/sssd/sssd.conf 2>/dev/null   # SSSD (on-prem AD)
+cat /mnt/linux_mount/etc/aad.conf 2>/dev/null          # Azure AD / Entra ID
+cat /mnt/linux_mount/etc/krb5.conf 2>/dev/null
+grep -rl "pam_sss\|aad_ssh" /mnt/linux_mount/etc/pam.d/ 2>/dev/null
 ```
 
 #### 3. Authentication Log Analysis

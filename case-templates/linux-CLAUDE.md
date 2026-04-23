@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **Init System** | <!-- systemd / SysV --> |
 | **Filesystem** | <!-- ext4 / xfs / btrfs / LVM+ext4 / LVM+xfs --> |
 | **Auditd Configured** | <!-- Yes (with execve rules) / Yes (minimal) / No / Unknown --> |
+| **Domain Joined** | <!-- No / AD via SSSD (domain.corp) / AD via winbind / LDAP only --> |
 | **Timezone** | <!-- e.g. America/New_York — affects syslog/auth.log timestamps; journald/auditd can be read in UTC regardless --> |
 | **Threat Actor** | <!-- Name or designation if known --> |
 | **Incident Declared** | <!-- YYYY-MM-DD UTC --> |
@@ -205,10 +206,14 @@ psort.py -o l2tcsv \
 
 ## Key Accounts
 
-| Account | UID | Role / Notes |
-|---------|-----|-------------|
-| root | 0 | System root |
-| <!-- account --> | <!-- uid --> | <!-- role --> |
+| Account | UID / Domain | Type | Role / Notes |
+|---------|--------------|------|-------------|
+| root | 0 | Local | System root |
+| <!-- account --> | <!-- uid or DOMAIN\user --> | Local / AD | <!-- role --> |
+
+> If the host is domain-joined, AD accounts appear in auth.log/secure and wtmp but
+> **not** in `/etc/passwd` (unless cached). Check `/etc/sssd/sssd.conf` for the domain
+> and `/var/log/sssd/` for auth events.
 
 ---
 
