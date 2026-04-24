@@ -146,6 +146,19 @@ grep -rE "(ALL|NOPASSWD)" \
   /mnt/linux_mount/etc/sudoers \
   /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null
 
+# Writable scripts/binaries listed explicitly in sudoers rules
+# A world-writable (or non-root-group-writable) sudoers target = trivial root
+grep -rh "^[^#]" \
+  /mnt/linux_mount/etc/sudoers \
+  /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null | \
+  grep -oE '/[^ ,\t:!]+' | sort -u | \
+  while IFS= read -r p; do
+    mp="/mnt/linux_mount${p}"
+    [ -f "$mp" ] || continue
+    result=$(find "$mp" -maxdepth 0 \( -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null)
+    [ -n "$result" ] && echo "WRITABLE SUDOERS TARGET: $p"
+  done | tee ./exports/writable_sudoers_paths.txt
+
 # SSH authorized_keys — backdoor key implantation
 find /mnt/linux_mount/home /mnt/linux_mount/root \
   -name "authorized_keys" 2>/dev/null | \
