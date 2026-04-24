@@ -59,6 +59,7 @@ Key files to extract and examine:
 - `/etc/group` — group memberships (check for unexpected sudo/wheel members)
 - `/etc/sudoers` and `/etc/sudoers.d/` — privilege escalation paths
 - `~/.ssh/authorized_keys` for all users — backdoor key implantation
+- `~/.ssh/config` and `/etc/ssh/ssh_config` — `ProxyCommand` executes arbitrary commands on SSH connect
 
 > **Domain-joined hosts:** Domain accounts (AD via SSSD/winbind, or Azure AD via
 > `aadsshlogin`) do NOT appear in `/etc/passwd`. Look for them in wtmp, auth.log,
@@ -401,6 +402,12 @@ find /mnt/linux_mount -perm -2000 -type f 2>/dev/null | sort > ./exports/sgid_bi
 # Compare against expected SUID binaries for the distro
 # Known-good SUID list varies by distro; flag anything not in /usr/bin or /usr/sbin
 grep -v "^\(/mnt/linux_mount\)\?\(/usr/bin\|/usr/sbin\|/bin\|/sbin\)" ./exports/suid_binaries.txt
+
+# User-writable SUID/SGID — world-writable or group-writable by non-root GID
+# Any non-root user can overwrite these while they still run as root
+find /mnt/linux_mount -xdev \( -perm -4000 -o -perm -2000 \) -type f \
+  \( -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null | \
+  tee ./exports/writable_suid_sgid.txt
 ```
 
 **Other persistence locations**
@@ -422,6 +429,21 @@ find /mnt/linux_mount/home -path "*/.config/autostart/*.desktop" 2>/dev/null
 ls /mnt/linux_mount/etc/pam.d/
 # Flag any non-standard .so references
 grep -rE "pam_\w+\.so" /mnt/linux_mount/etc/pam.d/ | grep -v "common-"
+
+# SSH client config — ProxyCommand persistence
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name "config" -path "*/.ssh/*" 2>/dev/null | \
+  xargs grep -li "ProxyCommand\|ControlMaster" 2>/dev/null
+
+# APT hooks (Debian/Ubuntu) — execute on every apt/dpkg operation
+ls /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null
+grep -rh "DPkg::\|APT::Update::" /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null
+
+# DNF/Yum plugins (RHEL/CentOS/Fedora) — Python loaded by package manager
+ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null
+find /mnt/linux_mount/usr/lib/python*/site-packages/dnf-plugins/ \
+     /mnt/linux_mount/usr/lib/yum-plugins/ \
+  -type f -name "*.py" 2>/dev/null
 ```
 
 #### 8. Execution Evidence (without auditd)

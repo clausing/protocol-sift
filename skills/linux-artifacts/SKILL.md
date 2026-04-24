@@ -673,6 +673,29 @@ find /mnt/linux_mount/home /mnt/linux_mount/root \
   done | tee ./exports/authorized_keys_fingerprinted.txt
 ```
 
+### SSH Client Config
+
+`~/.ssh/config` (and system-wide `/etc/ssh/ssh_config`) can contain `ProxyCommand`
+directives that execute arbitrary commands whenever the user SSHs to a matching host —
+a subtle persistence and credential-harvesting vector.
+
+```bash
+# System-wide SSH client config and drop-in dir
+cat /mnt/linux_mount/etc/ssh/ssh_config 2>/dev/null
+ls  /mnt/linux_mount/etc/ssh/ssh_config.d/ 2>/dev/null
+cat /mnt/linux_mount/etc/ssh/ssh_config.d/*.conf 2>/dev/null
+
+# Per-user SSH client configs
+find /mnt/linux_mount/home /mnt/linux_mount/root \
+  -name "config" -path "*/.ssh/*" 2>/dev/null | \
+  while IFS= read -r f; do
+    echo "=== $f ==="; cat "$f"
+  done | tee ./exports/ssh_client_configs.txt
+
+# Flag high-risk directives
+grep -i "ProxyCommand\|ControlMaster\|IdentityFile" ./exports/ssh_client_configs.txt
+```
+
 ### SUID / SGID Binaries
 
 ```bash
@@ -687,6 +710,12 @@ find /mnt/linux_mount -xdev -perm -2000 -type f 2>/dev/null | \
 # Flag SUID binaries outside standard system directories (suspicious additions)
 grep -v "^\(/mnt/linux_mount\)\?\(/usr\)\?\(/s\?bin\|/lib\)" \
   ./exports/suid_binaries.txt
+
+# User-writable SUID/SGID — world-writable or group-writable by a non-root GID
+# Any non-root user can overwrite the binary while it still runs as root
+find /mnt/linux_mount -xdev \( -perm -4000 -o -perm -2000 \) -type f \
+  \( -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null | \
+  tee ./exports/writable_suid_sgid.txt
 ```
 
 ### Other Persistence Locations
@@ -712,6 +741,20 @@ ls /mnt/linux_mount/etc/pam.d/
 # Non-standard PAM modules are unusual — flag any outside /lib/security/
 grep -rh "pam_" /mnt/linux_mount/etc/pam.d/ | \
   grep -v "^#" | awk '{print $3}' | sort -u
+
+# APT hooks (Debian/Ubuntu) — execute arbitrary commands during package operations
+# Directives: DPkg::Pre-Install-Pkgs, DPkg::Post-Invoke, APT::Update::Pre-Invoke, etc.
+ls /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null
+grep -rh "DPkg::\|APT::Update::" /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null | \
+  tee ./exports/apt_hooks.txt
+
+# DNF/Yum plugins (RHEL/CentOS/Fedora) — Python modules loaded by the package manager
+ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null
+ls /mnt/linux_mount/etc/yum/pluginconf.d/ 2>/dev/null
+find /mnt/linux_mount/usr/lib/python*/site-packages/dnf-plugins/ \
+     /mnt/linux_mount/usr/lib/python*/dist-packages/dnf-plugins/ \
+     /mnt/linux_mount/usr/lib/yum-plugins/ \
+  -type f -name "*.py" 2>/dev/null | tee ./exports/package_manager_plugins.txt
 ```
 
 ---
