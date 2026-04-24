@@ -55,12 +55,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **last / lastb** | `last -F -f <wtmp>` / `lastb -F -f <btmp>` | Login and failed-login history from binary logs |
 | **rkhunter** | `sudo rkhunter --check --rootdir /mnt/linux_mount` | Use `--rootdir` for offline mounted image |
 | **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Use `-r` for offline mounted image |
-| **dwarf2json** | `dwarf2json linux --elf <vmlinux>` | Generates Volatility 3 ISF from kernel debug symbols |
+| **btf2json** | `btf2json --btf <vmlinux> --map System.map > output.json` | Preferred ISF generator for kernels ≥5.2 (uses embedded BTF — no debug package needed); repo: github.com/vobst/btf2json |
+| **dwarf2json** | `dwarf2json linux --elf <vmlinux>` | Fallback ISF generator for kernels <5.2; requires kernel debug package (linux-image-*-dbg) |
 
 > **Linux memory symbols:** Volatility 3 Linux plugins require a per-kernel ISF
-> file — unlike Windows, symbols cannot be auto-downloaded. Generate with
-> `dwarf2json` from the target kernel's debug package, or source pre-built ISFs
-> from https://github.com/Abyss-W4tcher/volatility3-symbols
+> file — unlike Windows, symbols cannot be auto-downloaded. Priority:
+> (1) pre-built from https://github.com/Abyss-W4tcher/volatility3-symbols;
+> (2) `btf2json` from embedded BTF (kernels ≥5.2, no debug package needed);
+> (3) `dwarf2json` from the kernel debug package (older kernels).
 
 **Not available on this instance:** MemProcFS, VSCMount (Windows-only).
 
