@@ -80,7 +80,8 @@ find /mnt/linux_mount/home /mnt/linux_mount/root -name "authorized_keys" 2>/dev/
 grep -rE "(ALL|NOPASSWD)" /mnt/linux_mount/etc/sudoers \
   /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null
 
-# Writable scripts/binaries listed explicitly in sudoers rules
+# Suspect scripts/binaries listed explicitly in sudoers rules
+# Flags: non-root owner (can chmod/replace), world-writable, or non-root-group-writable
 grep -rh "^[^#]" \
   /mnt/linux_mount/etc/sudoers \
   /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null | \
@@ -88,8 +89,9 @@ grep -rh "^[^#]" \
   while IFS= read -r p; do
     mp="/mnt/linux_mount${p}"
     [ -f "$mp" ] || continue
-    result=$(find "$mp" -maxdepth 0 \( -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null)
-    [ -n "$result" ] && echo "WRITABLE SUDOERS TARGET: $p"
+    result=$(find "$mp" -maxdepth 0 \
+      \( ! -user root -o -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null)
+    [ -n "$result" ] && echo "SUSPECT SUDOERS TARGET: $p"
   done
 
 # Domain join detection
@@ -415,10 +417,9 @@ find /mnt/linux_mount -perm -2000 -type f 2>/dev/null | sort > ./exports/sgid_bi
 # Known-good SUID list varies by distro; flag anything not in /usr/bin or /usr/sbin
 grep -v "^\(/mnt/linux_mount\)\?\(/usr/bin\|/usr/sbin\|/bin\|/sbin\)" ./exports/suid_binaries.txt
 
-# User-writable SUID/SGID — world-writable or group-writable by non-root GID
-# Any non-root user can overwrite these while they still run as root
+# Suspect SUID/SGID — non-root-owned, world-writable, or non-root-group-writable
 find /mnt/linux_mount -xdev \( -perm -4000 -o -perm -2000 \) -type f \
-  \( -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null | \
+  \( ! -user root -o -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null | \
   tee ./exports/writable_suid_sgid.txt
 ```
 

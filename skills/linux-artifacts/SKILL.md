@@ -146,8 +146,8 @@ grep -rE "(ALL|NOPASSWD)" \
   /mnt/linux_mount/etc/sudoers \
   /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null
 
-# Writable scripts/binaries listed explicitly in sudoers rules
-# A world-writable (or non-root-group-writable) sudoers target = trivial root
+# Writable or non-root-owned scripts/binaries listed explicitly in sudoers rules
+# Non-root owner can chmod/replace the file; world/group-writable = any user can modify
 grep -rh "^[^#]" \
   /mnt/linux_mount/etc/sudoers \
   /mnt/linux_mount/etc/sudoers.d/ 2>/dev/null | \
@@ -155,8 +155,9 @@ grep -rh "^[^#]" \
   while IFS= read -r p; do
     mp="/mnt/linux_mount${p}"
     [ -f "$mp" ] || continue
-    result=$(find "$mp" -maxdepth 0 \( -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null)
-    [ -n "$result" ] && echo "WRITABLE SUDOERS TARGET: $p"
+    result=$(find "$mp" -maxdepth 0 \
+      \( ! -user root -o -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null)
+    [ -n "$result" ] && echo "SUSPECT SUDOERS TARGET: $p"
   done | tee ./exports/writable_sudoers_paths.txt
 
 # SSH authorized_keys — backdoor key implantation
@@ -724,10 +725,10 @@ find /mnt/linux_mount -xdev -perm -2000 -type f 2>/dev/null | \
 grep -v "^\(/mnt/linux_mount\)\?\(/usr\)\?\(/s\?bin\|/lib\)" \
   ./exports/suid_binaries.txt
 
-# User-writable SUID/SGID — world-writable or group-writable by a non-root GID
-# Any non-root user can overwrite the binary while it still runs as root
+# Suspect SUID/SGID — non-root-owned, world-writable, or non-root-group-writable
+# Owner can chmod/replace; writable = any matching user can overwrite
 find /mnt/linux_mount -xdev \( -perm -4000 -o -perm -2000 \) -type f \
-  \( -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null | \
+  \( ! -user root -o -perm -o+w -o \( -perm -g+w ! -group root \) \) 2>/dev/null | \
   tee ./exports/writable_suid_sgid.txt
 ```
 
