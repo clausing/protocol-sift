@@ -90,6 +90,81 @@ sudo umount /mnt/ewf
 
 ---
 
+## UAC Triage Collections
+
+UAC (Unix Artifact Collector — github.com/tclahr/uac) is a live-response triage tool
+that produces a tar.gz archive of forensic artifacts without a disk image. When you
+have a UAC collection instead of (or alongside) an E01, adapt the workflow as follows.
+
+```bash
+# Extract the archive
+mkdir -p /cases/<case>/uac
+tar -xzf /cases/<case>/<hostname>-<date>-uac.tar.gz -C /cases/<case>/uac/
+
+# Locate the UAC root (top-level extracted directory)
+UAC=$(ls -d /cases/<case>/uac/uac-*/ 2>/dev/null | head -1)
+ls "$UAC"   # confirm structure before proceeding
+```
+
+**Common UAC directory layout (verify with `ls $UAC` — varies by profile):**
+
+| Path | Contents |
+|------|----------|
+| `$UAC/live_response/process/` | `ps`, `lsof`, `/proc` snapshots — processes at collection time |
+| `$UAC/live_response/network/` | `netstat`, `ss`, `ip`, `arp` — network state at collection time |
+| `$UAC/live_response/system/` | `uname`, `lsmod`, `sysctl`, `dmesg` |
+| `$UAC/live_response/packages/` | `dpkg -l`, `rpm -qa` |
+| `$UAC/live_response/hardware/` | `lshw`, `dmidecode` |
+| `$UAC/bodyfile.txt` (or `bodyfile/`) | Pre-generated bodyfile — skip mactime generation |
+| `$UAC/etc/`, `$UAC/var/`, `$UAC/home/` | Collected files mirroring original paths |
+
+```bash
+# Volatile data available in UAC but absent from disk images
+cat "$UAC/live_response/process/ps.txt"       2>/dev/null
+cat "$UAC/live_response/process/lsof.txt"     2>/dev/null
+cat "$UAC/live_response/network/netstat.txt"  2>/dev/null
+cat "$UAC/live_response/network/ss.txt"       2>/dev/null
+cat "$UAC/live_response/system/lsmod.txt"     2>/dev/null
+
+# /dev/shm and /run contents — captured live by UAC, absent from disk images
+ls "$UAC/dev/shm/" 2>/dev/null
+ls "$UAC/run/"     2>/dev/null
+
+# Pre-generated bodyfile (sort by mtime for quick timeline)
+sort -t'|' -k9 -n "$UAC"/bodyfile*.txt 2>/dev/null | tee ./exports/uac_bodyfile_sorted.txt
+```
+
+**Adapting disk-image commands to UAC:** replace `/mnt/linux_mount` with `$UAC`.
+Most `grep`, `find`, `cat`, and `awk` commands in this skill work unchanged with
+that substitution. Tool-based analysis that requires a mounted block device
+(`journalctl --directory`, `last -f`, `ausearch -f`) still works if the relevant
+files were collected:
+
+```bash
+# Journal — if UAC collected var/log/journal
+MACHINE_ID=$(cat "$UAC/etc/machine-id" 2>/dev/null)
+journalctl --directory "$UAC/var/log/journal/${MACHINE_ID}/" --utc --no-pager 2>/dev/null
+
+# wtmp / btmp login history
+last  -F -f "$UAC/var/log/wtmp"  2>/dev/null
+lastb -F -f "$UAC/var/log/btmp"  2>/dev/null
+
+# Auth log (Debian/Ubuntu)
+grep "Accepted\|Failed\|sudo:" "$UAC/var/log/auth.log" 2>/dev/null
+```
+
+**What UAC provides vs disk image:**
+
+| Capability | Disk image (E01) | UAC triage |
+|------------|-----------------|------------|
+| Volatile data (processes, network, /dev/shm) | No — lost at shutdown | **Yes** — captured live |
+| Unallocated space / file carving | Yes | No |
+| Full filesystem (all files) | Yes | Profile-dependent |
+| TSK bodyfile / mactime | Generate from image | **Pre-generated** |
+| Memory | Separate .lime capture | No |
+
+---
+
 ## Distro Quick Reference
 
 | Artifact | Debian / Ubuntu | RHEL / CentOS / Fedora |
