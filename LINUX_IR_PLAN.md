@@ -31,6 +31,33 @@ correct tool permissions but zero workflow guidance.
 
 ---
 
+## Evidence Types
+
+Linux IR evidence typically arrives as one or more of these:
+
+| Type | Description | Notes |
+|------|-------------|-------|
+| Disk image (E01) | Full disk acquired offline | Mount read-only; enables carving + unallocated analysis |
+| Memory image (.lime) | LiME RAM capture | Volatility 3 Linux plugins; requires per-kernel ISF |
+| UAC triage archive (.tar.gz) | Live-response collection via [UAC](https://github.com/tclahr/uac) | Volatile data captured; no carving; bodyfile pre-generated |
+
+**When you have a UAC triage collection instead of (or alongside) a disk image:**
+
+```bash
+mkdir -p /cases/<case>/uac
+tar -xzf /cases/<case>/<host>-<date>-uac.tar.gz -C /cases/<case>/uac/
+UAC=$(ls -d /cases/<case>/uac/uac-*/ | head -1)
+ls "$UAC"   # confirm structure before proceeding
+```
+
+Replace `/mnt/linux_mount` with `$UAC` in artifact commands below. UAC captures
+volatile data (running processes, network state, `/dev/shm`, `/run`) that are absent
+from disk images because they live on tmpfs. What UAC does NOT provide: unallocated
+space, deleted file carving, or VSS snapshots. See `linux-artifacts/SKILL.md`
+§ UAC Triage Collections for the full command set.
+
+---
+
 ## Critical — New File: `skills/linux-artifacts/SKILL.md`
 
 This is the highest-priority deliverable. It is the Linux equivalent of
