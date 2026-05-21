@@ -865,6 +865,17 @@ xargs grep -EH \
   "(curl |wget |nc -|ncat |socat |/tmp/|/var/tmp/|/dev/shm/|/dev/tcp/|base64)" \
   < ./exports/nm_dispatcher_scripts.txt 2>/dev/null | \
   tee ./exports/nm_dispatcher_suspicious.txt
+
+# Python .pth files — Python executes import statements and os.system() calls found
+# in .pth files on startup; a malicious .pth in site-packages runs on every python invocation
+find /mnt/linux_mount/usr/lib/python* \
+     /mnt/linux_mount/usr/local/lib/python* \
+     /mnt/linux_mount/home/*/.local/lib/python* \
+  -type f -name '*.pth' 2>/dev/null | \
+  while IFS= read -r f; do
+    hit=$(grep -EH 'import |os\.system|exec\(' "$f" 2>/dev/null)
+    [[ -n "$hit" ]] && echo "$hit"
+  done | tee ./exports/python_pth_suspicious.txt
 ```
 
 ---
