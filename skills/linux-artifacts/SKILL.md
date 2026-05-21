@@ -876,6 +876,20 @@ find /mnt/linux_mount/usr/lib/python* \
     hit=$(grep -EH 'import |os\.system|exec\(' "$f" 2>/dev/null)
     [[ -n "$hit" ]] && echo "$hit"
   done | tee ./exports/python_pth_suspicious.txt
+
+# Git hooks — scripts in .git/hooks/ execute automatically on git operations
+# (pre-commit, post-merge, post-checkout, etc.); an attacker can implant code that
+# fires whenever a developer runs git commands in a compromised repo
+# .git/config can also set core.hooksPath to redirect to an attacker-controlled directory
+find /mnt/linux_mount -type f \
+  \( -path '*/.git/config' -o -path '*/.git/hooks/*' \) \
+  ! -name '*.sample' 2>/dev/null | \
+  tee ./exports/git_hooks.txt
+# Show hook content for manual review
+while IFS= read -r f; do
+  echo "=== $f ==="
+  cat "$f" 2>/dev/null
+done < ./exports/git_hooks.txt | tee ./exports/git_hooks_content.txt
 ```
 
 ---
