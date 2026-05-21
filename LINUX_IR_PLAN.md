@@ -450,6 +450,15 @@ find /mnt/linux_mount -xdev \( -perm -4000 -o -perm -2000 \) -type f \
   tee ./exports/writable_suid_sgid.txt
 ```
 
+**POSIX file capabilities (credit: raj3shp/persisthunt)**
+```bash
+# Capabilities are a modern alternative to SUID — not visible in SUID searches
+# cap_setuid on an interpreter (python3, perl) = effective root
+getcap -r /mnt/linux_mount 2>/dev/null | tee ./exports/file_capabilities.txt
+grep -E "cap_(setuid|setgid|sys_admin|sys_ptrace|net_raw|dac_override)" \
+  ./exports/file_capabilities.txt
+```
+
 **Other persistence locations**
 ```bash
 # AT jobs
@@ -484,6 +493,44 @@ ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null
 find /mnt/linux_mount/usr/lib/python*/site-packages/dnf-plugins/ \
      /mnt/linux_mount/usr/lib/yum-plugins/ \
   -type f -name "*.py" 2>/dev/null
+
+# D-Bus service files (credit: raj3shp/persisthunt)
+find /mnt/linux_mount -path '*/dbus-1/*' -type f -name '*.service' 2>/dev/null | \
+  tee ./exports/dbus_services.txt
+grep -EH \
+  "(curl |wget |nc -|ncat |socat |/tmp/|/var/tmp/|/dev/shm/|/dev/tcp/|base64)" \
+  $(cat ./exports/dbus_services.txt) 2>/dev/null | \
+  tee ./exports/dbus_services_suspicious.txt
+
+# NetworkManager dispatcher scripts (credit: raj3shp/persisthunt)
+find /mnt/linux_mount -path '*/NetworkManager/dispatcher.d/*' \
+  -type f -executable 2>/dev/null | \
+  tee ./exports/nm_dispatcher_scripts.txt
+xargs grep -EH \
+  "(curl |wget |nc -|ncat |socat |/tmp/|/var/tmp/|/dev/shm/|/dev/tcp/|base64)" \
+  < ./exports/nm_dispatcher_scripts.txt 2>/dev/null | \
+  tee ./exports/nm_dispatcher_suspicious.txt
+
+# Python .pth file persistence (credit: raj3shp/persisthunt)
+# .pth files in site-packages execute arbitrary code at interpreter startup
+find /mnt/linux_mount/usr/lib/python* \
+     /mnt/linux_mount/usr/local/lib/python* \
+     /mnt/linux_mount/home/*/.local/lib/python* \
+  -type f -name '*.pth' 2>/dev/null | \
+  while IFS= read -r f; do
+    hit=$(grep -EH 'import |os\.system|exec\(' "$f" 2>/dev/null)
+    [[ -n "$hit" ]] && echo "$hit"
+  done | tee ./exports/python_pth_suspicious.txt
+
+# Git hooks / config (credit: raj3shp/persisthunt)
+find /mnt/linux_mount -type f \
+  \( -path '*/.git/config' -o -path '*/.git/hooks/*' \) \
+  ! -name '*.sample' 2>/dev/null | \
+  tee ./exports/git_hooks.txt
+while IFS= read -r f; do
+  echo "=== $f ==="
+  cat "$f" 2>/dev/null
+done < ./exports/git_hooks.txt | tee ./exports/git_hooks_content.txt
 ```
 
 #### 8. Execution Evidence (without auditd)
@@ -531,6 +578,33 @@ cat /mnt/linux_mount/etc/ld.so.preload
 # Requires live system; for offline: check /mnt/linux_mount/lib/modules/$(uname-r)/
 find /mnt/linux_mount/lib/modules -name "*.ko" 2>/dev/null | \
   xargs -I{} basename {} .ko | sort > ./analysis/all_modules_on_disk.txt
+
+# Hidden ELF files in staging areas (credit: raj3shp/persisthunt)
+find /mnt/linux_mount/tmp \
+     /mnt/linux_mount/var/tmp \
+     /mnt/linux_mount/home \
+  -type f -name '.*' 2>/dev/null | \
+  while IFS= read -r f; do
+    file "$f" 2>/dev/null | grep -q 'ELF' && echo "$f"
+  done | tee ./exports/hidden_elf_files.txt
+
+# eBPF/BPFdoor — raw packet socket rootkit (credit: raj3shp/persisthunt)
+# Live check: grep packet_recvmsg /proc/*/stack 2>/dev/null
+# From UAC triage collection:
+grep -i raw    "$UAC/live_response/network/ss.txt"    2>/dev/null
+grep -i packet "$UAC/live_response/process/lsof.txt" 2>/dev/null
+grep '(deleted)' "$UAC/live_response/process/lsof.txt" 2>/dev/null
+
+# Hidden processes — /proc enumeration vs ps (UAC only — /proc is virtual, absent from disk images)
+comm -23 \
+  <(ls "$UAC/proc/" 2>/dev/null | grep -E '^[0-9]+' | sort) \
+  <(awk 'NR>1{print $2}' "$UAC/live_response/process/ps.txt" 2>/dev/null | sort) \
+  2>/dev/null | tee ./exports/hidden_pids.txt
+
+# Hidden process via /proc bind mount — use UAC live mount table
+# (/proc/mounts is virtual — not in disk images; use UAC-captured output)
+grep -E '/proc/[0-9]+' "$UAC/live_response/system/mount.txt" 2>/dev/null | \
+  tee ./exports/proc_bind_mounts.txt
 ```
 
 #### 10. Web Server Artifacts
