@@ -844,6 +844,16 @@ find /mnt/linux_mount/usr/lib/python*/site-packages/dnf-plugins/ \
      /mnt/linux_mount/usr/lib/python*/dist-packages/dnf-plugins/ \
      /mnt/linux_mount/usr/lib/yum-plugins/ \
   -type f -name "*.py" 2>/dev/null | tee ./exports/package_manager_plugins.txt
+
+# D-Bus service files — a D-Bus .service file can specify an Exec= that runs as the
+# activating user; an attacker can drop one to execute code when any D-Bus call hits it
+find /mnt/linux_mount -path '*/dbus-1/*' -type f -name '*.service' 2>/dev/null | \
+  tee ./exports/dbus_services.txt
+# Flag entries referencing staging areas or network tools
+grep -EH \
+  "(curl |wget |nc -|ncat |socat |/tmp/|/var/tmp/|/dev/shm/|/dev/tcp/|base64)" \
+  $(cat ./exports/dbus_services.txt) 2>/dev/null | \
+  tee ./exports/dbus_services_suspicious.txt
 ```
 
 ---
