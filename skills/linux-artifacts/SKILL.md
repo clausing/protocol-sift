@@ -1058,6 +1058,29 @@ rpm --root=/mnt/linux_mount -Va 2>/dev/null | \
 # Kernel module list from disk (use with Volatility linux.check_modules for diff)
 find /mnt/linux_mount/lib/modules -name "*.ko" 2>/dev/null | \
   xargs -I{} basename {} .ko | sort > ./analysis/modules_on_disk.txt
+
+# eBPF/BPFdoor — BPFdoor attaches an eBPF program to a raw network socket so it
+# receives every packet; the backdoor is triggered by a magic packet rather than
+# an open port, making it invisible to netstat/ss. Live-system check only:
+#   grep packet_recvmsg /proc/*/stack 2>/dev/null
+# From a UAC collection, look for raw sockets and deleted-but-running executables:
+grep -i raw   "$UAC/live_response/network/ss.txt"    2>/dev/null
+grep -i packet "$UAC/live_response/process/lsof.txt" 2>/dev/null
+grep '(deleted)' "$UAC/live_response/process/lsof.txt" 2>/dev/null
+
+# Hidden processes via /proc vs ps discrepancy — live-system or UAC only
+# (/proc is a virtual filesystem; absent from disk images)
+# From a UAC collection: compare the collected /proc PID listing to the ps snapshot
+comm -23 \
+  <(ls "$UAC/proc/" 2>/dev/null | grep -E '^[0-9]+$' | sort) \
+  <(awk 'NR>1{print $2}' "$UAC/live_response/process/ps.txt" 2>/dev/null | sort) \
+  2>/dev/null | tee ./exports/hidden_pids.txt
+
+# Hidden process via /proc bind mount — attacker bind-mounts something over /proc/<pid>
+# to hide the process; visible in the live mount table captured by UAC
+# (/proc/mounts is virtual — not present in disk images; use UAC mount output)
+grep -E '/proc/[0-9]+' "$UAC/live_response/system/mount.txt" 2>/dev/null | \
+  tee ./exports/proc_bind_mounts.txt
 ```
 
 Note: both `rkhunter` and `chkrootkit` can produce false positives against offline
