@@ -950,6 +950,16 @@ find /mnt/linux_mount/tmp \
      /mnt/linux_mount/var/tmp \
   -type f 2>/dev/null | tee ./exports/staging_files.txt
 
+# Hidden ELF binaries in staging/home dirs — attackers name dropper tools with a
+# leading dot to hide them from plain ls; check file magic to confirm ELF regardless of name
+find /mnt/linux_mount/tmp \
+     /mnt/linux_mount/var/tmp \
+     /mnt/linux_mount/home \
+  -type f -name '.*' 2>/dev/null | \
+  while IFS= read -r f; do
+    file "$f" 2>/dev/null | grep -q 'ELF' && echo "$f"
+  done | tee ./exports/hidden_elf_files.txt
+
 # Hash all staging files for VirusTotal pivot
 find /mnt/linux_mount/tmp \
      /mnt/linux_mount/var/tmp \
