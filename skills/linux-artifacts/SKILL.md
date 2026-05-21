@@ -854,6 +854,17 @@ grep -EH \
   "(curl |wget |nc -|ncat |socat |/tmp/|/var/tmp/|/dev/shm/|/dev/tcp/|base64)" \
   $(cat ./exports/dbus_services.txt) 2>/dev/null | \
   tee ./exports/dbus_services_suspicious.txt
+
+# NetworkManager dispatcher scripts — executed as root by NetworkManager when
+# interface state changes (up/down/vpn-up/etc.); any executable file here runs as root
+find /mnt/linux_mount -path '*/NetworkManager/dispatcher.d/*' \
+  -type f -executable 2>/dev/null | \
+  tee ./exports/nm_dispatcher_scripts.txt
+# Inspect content of each script for red flags
+xargs grep -EH \
+  "(curl |wget |nc -|ncat |socat |/tmp/|/var/tmp/|/dev/shm/|/dev/tcp/|base64)" \
+  < ./exports/nm_dispatcher_scripts.txt 2>/dev/null | \
+  tee ./exports/nm_dispatcher_suspicious.txt
 ```
 
 ---
