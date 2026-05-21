@@ -800,6 +800,14 @@ find /mnt/linux_mount -xdev -perm -2000 -type f 2>/dev/null | \
 grep -v "^\(/mnt/linux_mount\)\?\(/usr\)\?\(/s\?bin\|/lib\)" \
   ./exports/suid_binaries.txt
 
+# POSIX file capabilities — grant specific privileges without full SUID root
+# Attackers use cap_setuid, cap_net_raw, cap_net_bind_service, cap_sys_ptrace, etc.
+# to achieve privilege escalation without the visibility of a SUID binary
+getcap -r /mnt/linux_mount 2>/dev/null | tee ./exports/file_capabilities.txt
+# Flag high-risk capabilities
+grep -E "cap_(setuid|setgid|sys_admin|sys_ptrace|net_raw|dac_override)" \
+  ./exports/file_capabilities.txt
+
 # Suspect SUID/SGID — non-root-owned, world-writable, or non-root-group-writable
 # Owner can chmod/replace; writable = any matching user can overwrite
 find /mnt/linux_mount -xdev \( -perm -4000 -o -perm -2000 \) -type f \
