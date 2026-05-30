@@ -64,6 +64,11 @@ This is the highest-priority deliverable. It is the Linux equivalent of
 `windows-artifacts/SKILL.md` (currently 721 lines). Without it, an analyst
 has no skill-file guidance for persistence, logs, or user activity on a Linux host.
 
+The implemented file also includes two sections that precede the artifact analysis
+content: **Filesystem Type Detection** (identifying ext4/XFS/Btrfs/LVM before mounting)
+and **Mount Procedures (Linux)** (covering ext4, XFS, Btrfs, and LVM activation). These
+are referenced by `skills/sleuthkit/SKILL.md` for non-TSK-supported filesystems.
+
 ### Required sections
 
 #### 1. Overview
@@ -908,12 +913,12 @@ vol -f <image.img> linux.malfind --dump --output-dir ./exports/malfind/
 
 | Tool | Invocation | Notes |
 |------|-----------|-------|
-| **journalctl** | `journalctl --file <journal> --utc` | Read offline journal from mounted evidence |
+| **journalctl** | `journalctl --directory <path> --utc` | Use `--directory` to read offline journal from mounted evidence |
 | **ausearch** | `ausearch -i -f <audit.log>` | Search auditd records |
 | **aureport** | `aureport --summary -if <audit.log>` | Summarize auditd log |
-| **rkhunter** | `sudo rkhunter --check --rootdir /mnt/linux_mount` | Rootkit detection |
-| **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Rootkit detection |
-| **last / lastb** | `last -F -f <wtmp>` / `lastb -F -f <btmp>` | Login history |
+| **rkhunter** | `sudo rkhunter --check --rootdir /mnt/linux_mount` | Use `--rootdir` for offline mounted image |
+| **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Use `-r` for offline mounted image |
+| **last / lastb** | `last -F -f <wtmp>` / `lastb -F -f <btmp>` | Login and failed-login history from binary logs |
 | **lsmod** | `lsmod` | Kernel module listing (live system) |
 | **btf2json** | `btf2json --btf <vmlinux> --map System.map` | Generate Volatility Linux ISF (kernels ≥ 5.2, no debug pkg needed) |
 | **dwarf2json** | `dwarf2json linux --elf <vmlinux>` | Generate Volatility Linux ISF (fallback for older kernels) |
@@ -991,40 +996,19 @@ and mactime bodyfiles from `fls`.
 
 ## Important — Update: `skills/sleuthkit/SKILL.md`
 
-### Changes needed
+### Changes implemented
 
-**Add a "Linux Targeted Artifact Extraction" subsection** to Step 12 (currently only
-has Windows paths). Key extractions:
+**Added a "Linux Artifact Extraction" section** — rather than duplicating extraction
+commands already covered in `skills/linux-artifacts/SKILL.md`, the section points
+there for the complete workflow and adds Linux filesystem notes inline:
 
-```bash
-# /etc — accounts, SSH config, PAM, persistence config
-sudo find /mnt/linux_mount/etc -type f \
-  \( -name "passwd" -o -name "shadow" -o -name "sudoers" \
-     -o -name "crontab" -o -name "sshd_config" \
-     -o -path "*/sshd_config.d/*" \
-     -o -name "ld.so.preload" \) \
-  -exec cp --parents {} ./exports/etc/ \; 2>/dev/null
-
-# Auth logs
-sudo cp -rp /mnt/linux_mount/var/log/auth.log ./exports/logs/ 2>/dev/null || \
-sudo cp -rp /mnt/linux_mount/var/log/secure   ./exports/logs/ 2>/dev/null
-
-# Systemd journal (binary format — copy first, then read with journalctl)
-sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
-  -exec cp --parents {} ./exports/journal/ \; 2>/dev/null
-
-# Shell histories — all shells
-sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
-  \( -name ".bash_history" -o -name ".zsh_history" -o -name ".zhistory" \
-     -o -path "*/fish/fish_history" -o -name ".history" -o -name ".sh_history" \) \
-  -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
-```
-
-**Add ext4 notes:**
+- TSK tools (`fls`, `icat`, `mactime`) support **ext2/3/4 only**; XFS, Btrfs, and LVM
+  require a direct `mount` — see `skills/linux-artifacts/SKILL.md` (Mount Procedures)
 - Root directory inode on ext4 is **inode 2** (not inode 5 as on NTFS)
-- `norecovery` prevents journal replay on all journaled filesystems (NTFS, ext3/ext4, XFS);
-  use `ro,nosuid,noexec,nodev,norecovery` for evidence mounts of these types; Btrfs needs only `ro,nosuid,noexec,nodev`
-- Use `fls -f ext4` (or `ext3`) when forcing filesystem type; TSK does not support XFS
+- `norecovery` prevents journal replay on NTFS, ext3/ext4, and XFS; Btrfs: `-o ro` only
+- **LVM detection:** if `mmls` shows `Linux LVM` partition type (MBR `0x8e` or matching
+  GPT GUID), do not attempt a direct TSK pass — activate the volume group with
+  `vgscan` / `vgchange -ay` first; see `skills/linux-artifacts/SKILL.md` (Mount Procedures)
 
 ---
 
@@ -1151,7 +1135,8 @@ Add to the `permissions.allow` array:
 "Bash(modinfo *)",
 "Bash(getfattr *)",
 "Bash(systemctl *)",
-"Bash(dwarf2json *)"
+"Bash(dwarf2json *)",
+"Bash(getcap *)"
 ```
 
 ---

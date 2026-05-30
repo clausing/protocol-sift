@@ -109,6 +109,7 @@
       "Bash(getfattr *)",
       "Bash(systemctl *)",
       "Bash(dwarf2json *)",
+      "Bash(getcap *)",
 
       "Bash(md5sum *)",
       "Bash(sha1sum *)",

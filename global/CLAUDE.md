@@ -53,6 +53,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **ausearch** | `ausearch -i -f <audit.log>` | Use `-f` for offline audit log; without it reads the live system |
 | **aureport** | `aureport --summary -if <audit.log>` | Use `-if` for offline audit log |
 | **last / lastb** | `last -F -f <wtmp>` / `lastb -F -f <btmp>` | Login and failed-login history from binary logs |
+| **lsmod** | `lsmod` | Kernel module listing (live system) |
 | **rkhunter** | `sudo rkhunter --check --rootdir /mnt/linux_mount` | Use `--rootdir` for offline mounted image |
 | **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Use `-r` for offline mounted image |
 | **btf2json** | `btf2json --btf <vmlinux> --map System.map > output.json` | Preferred ISF generator for kernels ≥5.2 (uses embedded BTF — no debug package needed); repo: github.com/vobst/btf2json |
