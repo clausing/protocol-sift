@@ -24,7 +24,7 @@ correct tool permissions but zero workflow guidance.
 | Important | Update | `global/CLAUDE.md` | Add Linux routing entry + tool paths |
 | Important | Update | `skills/plaso-timeline/SKILL.md` | Expand `linux` parser documentation |
 | Important | Update | `skills/sleuthkit/SKILL.md` | Add Linux artifact extraction block |
-| Important | Update | `case-templates/CLAUDE.md` | Add Linux case template section |
+| Important | **New** | `case-templates/linux-CLAUDE.md` | Linux case template with session setup block |
 | Minor | Update | `skills/yara-hunting/SKILL.md` | Add ELF module + Linux Velociraptor |
 | Minor | Update | `global/settings.json` | Add Linux tool permissions |
 | Minor | Update | `install.sh` | Install new linux-artifacts skill dir |
@@ -1231,6 +1231,22 @@ A Linux case needs different metadata fields than a Windows domain investigation
 | `/cases/<case>/memory.lime` | <hostname> | LiME memory capture (X GB) |
 
 ## Common Commands
+
+### Session setup
+
+Add as the first block in Common Commands so Claude runs it at the start of every
+session regardless of how the template was deployed (install.sh or manual copy):
+
+```bash
+mkdir -p ./analysis ./exports ./reports
+[ -f ~/.claude/analysis-scripts/md2pdf.py ] && \
+  cp ~/.claude/analysis-scripts/md2pdf.py ./analysis/md2pdf.py
+```
+
+Ensures output directories exist and the report converter is available. The `cp`
+is a no-op if `install.sh` was never run. The directive line above Common Commands
+(`**At the start of every session, run the Session setup block...**`) makes this
+an explicit instruction Claude cannot skip.
 
 ### Mount image (read-only)
 ```bash
