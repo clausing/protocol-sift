@@ -120,12 +120,12 @@ echo
 
 info "Installing analysis scripts…"
 mkdir -p "$CLAUDE_DIR/analysis-scripts"
-src="$REPO_DIR/analysis-scripts/generate_pdf_report.py"
+src="$REPO_DIR/analysis-scripts/md2pdf.py"
 if [[ -f "$src" ]]; then
-    cp "$src" "$CLAUDE_DIR/analysis-scripts/generate_pdf_report.py"
-    ok "  generate_pdf_report.py → $CLAUDE_DIR/analysis-scripts/"
+    cp "$src" "$CLAUDE_DIR/analysis-scripts/md2pdf.py"
+    ok "  md2pdf.py → $CLAUDE_DIR/analysis-scripts/"
 else
-    warn "  analysis-scripts/generate_pdf_report.py not found, skipping."
+    warn "  analysis-scripts/md2pdf.py not found, skipping."
 fi
 echo
 
@@ -188,7 +188,7 @@ echo
 echo "    export CASE=CLIENT-IR-2025-001"
 echo "    mkdir -p /cases/\${CASE}/{analysis,exports,reports}"
 echo "    cp \${HOME}/.claude/case-templates/CLAUDE.md /cases/\${CASE}/CLAUDE.md"
-echo "    cp \${HOME}/.claude/analysis-scripts/generate_pdf_report.py \\"
+echo "    cp \${HOME}/.claude/analysis-scripts/md2pdf.py \\"
 echo "       /cases/\${CASE}/analysis/"
 echo "    nano /cases/\${CASE}/CLAUDE.md   # fill in case details"
 echo "    cd /cases/\${CASE} && claude"

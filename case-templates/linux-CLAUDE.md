@@ -36,9 +36,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Read-only — do NOT modify evidence files.**
 Output all analysis to `./analysis/`, `./exports/`, or `./reports/` relative to this directory.
 
+**At the start of every session, run the Session setup block (first item in Common Commands) before any analysis.**
+
 ---
 
 ## Common Commands
+
+### Session setup
+
+```bash
+# Create output directories (idempotent — safe to re-run)
+mkdir -p ./analysis ./exports ./reports
+
+# Copy report converter if installed (requires: pip install markdown weasyprint)
+[ -f ~/.claude/analysis-scripts/md2pdf.py ] && \
+  cp ~/.claude/analysis-scripts/md2pdf.py ./analysis/md2pdf.py
+```
 
 ### UAC triage collection (if available)
 

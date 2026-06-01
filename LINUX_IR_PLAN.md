@@ -28,6 +28,7 @@ correct tool permissions but zero workflow guidance.
 | Minor | Update | `skills/yara-hunting/SKILL.md` | Add ELF module + Linux Velociraptor |
 | Minor | Update | `global/settings.json` | Add Linux tool permissions |
 | Minor | Update | `install.sh` | Install new linux-artifacts skill dir |
+| Minor | **New** | `analysis-scripts/md2pdf.py` | Generic Markdown → PDF converter (replaces `generate_pdf_report.py`) |
 
 ---
 
@@ -1288,6 +1289,28 @@ Add `markdown` to the optional PDF dependency prompt alongside `weasyprint`
 ```bash
 pip3 install markdown weasyprint
 ```
+
+Replace the `generate_pdf_report.py` copy step with `md2pdf.py` (the old script
+had hard-coded content from a prior investigation and was not reusable):
+
+```bash
+# analysis-scripts install block: copy md2pdf.py instead of generate_pdf_report.py
+cp "$REPO_DIR/analysis-scripts/md2pdf.py" "$CLAUDE_DIR/analysis-scripts/md2pdf.py"
+```
+
+Also update the "Start a new case" quickstart example at the bottom of install.sh
+to reference `md2pdf.py` instead of `generate_pdf_report.py`.
+
+### New: `analysis-scripts/md2pdf.py`
+
+Generic Markdown-to-PDF converter for turning IR findings reports into
+deliverable PDFs. Takes any `.md` file as input; outputs a styled PDF with
+page numbers, code block formatting, and table styling via WeasyPrint.
+
+Usage: `python3 analysis-scripts/md2pdf.py ~/IR_FINDINGS.md [-o report.pdf]`
+
+Replaces `analysis-scripts/generate_pdf_report.py`, which had hard-coded
+content from a prior investigation and was not reusable across cases.
 
 ---
 
