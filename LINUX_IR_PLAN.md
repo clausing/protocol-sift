@@ -499,6 +499,18 @@ grep -Ei '(Pre|Post)-Invoke|Pre-Install-Pkgs' ./exports/apt_hooks.txt | \
   grep -Ev '"[[:space:]]*/?(usr/|usr/local/|s?bin/|lib/)' | \
   grep -E '"' | \
   tee ./exports/apt_hooks_suspicious.txt
+# TRIAGE: ANY non-empty apt_hooks_suspicious.txt is a confirmed finding — not a review
+# queue. Attackers name backdoors after legitimate services (sshd, cron, systemd) to
+# defeat casual inspection. The PATH is the indicator, not the name: a real sshd is
+# /usr/sbin/sshd, never /root/.backup/sshd.
+#
+# Timestamps on conf files containing hook directives (mtime/ctime shows when planted):
+#   grep -rl ... | while read f; do stat -c "atime: %x / mtime: %y / ctime: %z / crtime: %w" $f; done
+#   → ./exports/apt_hook_conf_timestamps.txt
+#
+# For each flagged binary: file type + all four timestamps + sha256 for threat intel:
+#   while read line; do binary=...; file + stat + sha256sum "$target"; done
+#   → ./exports/apt_hooks_binaries.txt
 
 # DNF/Yum plugins (RHEL/CentOS/Fedora) — Python loaded by package manager
 ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null
@@ -508,12 +520,14 @@ find /mnt/linux_mount/usr/lib/python*/site-packages/dnf-plugins/ \
      /mnt/linux_mount/usr/lib/yum-plugins/ \
   -type f -name "*.py" 2>/dev/null | tee ./exports/package_manager_plugins.txt
 # Flag plugins with execution or network primitives (subprocess, socket, eval, etc.)
-grep -Hl \
-  -e "subprocess" -e "os\.system" -e "os\.popen" \
-  -e "socket\." -e "urllib" -e "base64" -e "eval(" -e "exec(" \
-  -e "/tmp/" -e "/var/tmp/" -e "/dev/shm/" \
-  $(cat ./exports/package_manager_plugins.txt) 2>/dev/null | \
+# Patterns: subprocess, os.system, os.popen, os.exec, socket, urllib, requests,
+#           base64, eval(, exec(, /tmp/, /var/tmp/, /dev/shm/
+grep -Hl ... $(cat ./exports/package_manager_plugins.txt) 2>/dev/null | \
   tee ./exports/package_manager_plugins_suspicious.txt
+# For each content-flagged plugin: all four timestamps + matching lines with line numbers.
+# ctime reveals ownership changes even when mtime was backdated.
+#   while read plugin; do stat -c "atime/mtime/ctime/crtime" + grep -n ...; done
+#   → ./exports/package_manager_plugins_findings.txt
 
 # D-Bus service files (credit: raj3shp/persisthunt)
 find /mnt/linux_mount -path '*/dbus-1/*' -type f -name '*.service' 2>/dev/null | \
@@ -768,6 +782,36 @@ Consistent with existing case structure:
 | Staging files | `./exports/staging/` |
 | Analysis text | `./analysis/` |
 | Reports | `./reports/` |
+| Timeline window (attack window filter) | `./exports/timeline_window.txt` |
+| Timeline window — filesystem only (Plaso) | `./exports/timeline_window_fs.txt` |
+| Timeline IOC cross-reference | `./exports/timeline_ioc_hits.txt` |
+| Timeline cluster pivot | `./exports/timeline_cluster.txt` |
+| Backdated files (mtime/ctime discrepancy) | `./exports/timeline_backdated.txt` |
+
+### Timeline Integration
+
+Time-based discovery that complements the location/content-based persistence checks.
+Requires a bodyfile (from `fls`, see `skills/sleuthkit/SKILL.md`) or a Plaso
+supertimeline (see `skills/plaso-timeline/SKILL.md`). Supported formats: bodyfile,
+mactime, mactime -y, l2tcsv, dynamic.
+
+**Format identification** — detect format from header / first data line.
+
+**Time-window sweep** — filter all filesystem events to the established attack window
+using ctime (`$10` in bodyfile). ctime is unforgeable by `touch -t` and reflects the
+actual write time even when mtime was backdated.
+
+**IOC cross-reference** — strip the `/mnt/linux_mount` prefix from SKILL export paths
+and grep the timeline to get confirmed timestamps for every flagged artifact.
+
+**Cluster pivot** — take the ctime of a confirmed malicious file and find everything
+within ±60 seconds. Attackers drop their full toolkit in one session; the cluster
+surfaces files missed by pattern checks because they were in unusual locations or had
+innocuous names. Plaso supertimeline pivots also show correlated log events (SSH logins,
+command execution) in the same minute window.
+
+**Backdating detection** (bodyfile only) — flag files whose ctime falls in the attack
+window but mtime is >7 days older (`touch -t` forges mtime/atime; ctime is immutable).
 
 ---
 
