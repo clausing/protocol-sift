@@ -502,9 +502,18 @@ grep -Ei '(Pre|Post)-Invoke|Pre-Install-Pkgs' ./exports/apt_hooks.txt | \
 
 # DNF/Yum plugins (RHEL/CentOS/Fedora) — Python loaded by package manager
 ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null
+ls /mnt/linux_mount/etc/yum/pluginconf.d/ 2>/dev/null
 find /mnt/linux_mount/usr/lib/python*/site-packages/dnf-plugins/ \
+     /mnt/linux_mount/usr/lib/python*/dist-packages/dnf-plugins/ \
      /mnt/linux_mount/usr/lib/yum-plugins/ \
-  -type f -name "*.py" 2>/dev/null
+  -type f -name "*.py" 2>/dev/null | tee ./exports/package_manager_plugins.txt
+# Flag plugins with execution or network primitives (subprocess, socket, eval, etc.)
+grep -Hl \
+  -e "subprocess" -e "os\.system" -e "os\.popen" \
+  -e "socket\." -e "urllib" -e "base64" -e "eval(" -e "exec(" \
+  -e "/tmp/" -e "/var/tmp/" -e "/dev/shm/" \
+  $(cat ./exports/package_manager_plugins.txt) 2>/dev/null | \
+  tee ./exports/package_manager_plugins_suspicious.txt
 
 # D-Bus service files (credit: raj3shp/persisthunt)
 find /mnt/linux_mount -path '*/dbus-1/*' -type f -name '*.service' 2>/dev/null | \

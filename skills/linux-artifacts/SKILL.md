@@ -863,12 +863,37 @@ while IFS= read -r line; do
 done < ./exports/apt_hooks_suspicious.txt | tee ./exports/apt_hooks_binaries.txt
 
 # DNF/Yum plugins (RHEL/CentOS/Fedora) — Python modules loaded by the package manager
+# List plugin config files — each .conf enables a named plugin module
 ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null
 ls /mnt/linux_mount/etc/yum/pluginconf.d/ 2>/dev/null
+
+# Find all plugin Python files across standard locations
 find /mnt/linux_mount/usr/lib/python*/site-packages/dnf-plugins/ \
      /mnt/linux_mount/usr/lib/python*/dist-packages/dnf-plugins/ \
      /mnt/linux_mount/usr/lib/yum-plugins/ \
   -type f -name "*.py" 2>/dev/null | tee ./exports/package_manager_plugins.txt
+
+# Flag plugins containing execution or network primitives — a legitimate plugin
+# has no reason to call subprocess/socket/eval or reference staging paths
+grep -Hl \
+  -e "subprocess" -e "os\.system" -e "os\.popen" -e "os\.exec" \
+  -e "socket\." -e "urllib" -e "requests\." -e "http\." \
+  -e "base64" -e "eval(" -e "exec(" \
+  -e "/tmp/" -e "/var/tmp/" -e "/dev/shm/" \
+  $(cat ./exports/package_manager_plugins.txt) 2>/dev/null | \
+  tee ./exports/package_manager_plugins_suspicious.txt
+
+# Show the matching lines with context for each flagged plugin
+while IFS= read -r plugin; do
+  echo "=== $plugin ==="
+  grep -n \
+    -e "subprocess" -e "os\.system" -e "os\.popen" -e "os\.exec" \
+    -e "socket\." -e "urllib" -e "requests\." \
+    -e "base64" -e "eval(" -e "exec(" \
+    -e "/tmp/" -e "/var/tmp/" -e "/dev/shm/" \
+    "$plugin" 2>/dev/null
+done < ./exports/package_manager_plugins_suspicious.txt | \
+  tee ./exports/package_manager_plugins_findings.txt
 
 # D-Bus service files — a D-Bus .service file can specify an Exec= that runs as the
 # activating user; an attacker can drop one to execute code when any D-Bus call hits it
