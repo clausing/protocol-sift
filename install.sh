@@ -150,28 +150,28 @@ else
 fi
 echo
 
-# ── optional: WeasyPrint ──────────────────────────────────────────────────────
+# ── optional: markdown + WeasyPrint (PDF report generation) ──────────────────
 
 if [[ -t 0 ]]; then
     # stdin is a terminal — we can prompt
-    read -rp "Install WeasyPrint PDF dependency now? (pip3 install weasyprint) [y/N] " yn
+    read -rp "Install PDF dependencies now? (pip3 install markdown weasyprint) [y/N] " yn
 else
     # piped install — skip interactive prompt, print manual instructions instead
     yn="n"
 fi
 
 if [[ "$yn" =~ ^[Yy]$ ]]; then
-    info "Installing WeasyPrint…"
-    if pip3 install weasyprint; then
-        ok "WeasyPrint installed."
+    info "Installing markdown and WeasyPrint…"
+    if pip3 install markdown weasyprint; then
+        ok "markdown and WeasyPrint installed."
     else
         warn "pip3 install failed. Try manually:"
-        warn "  pip3 install weasyprint"
+        warn "  pip3 install markdown weasyprint"
         warn "  sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 libpango-1.0-0"
     fi
 else
-    info "Skipping WeasyPrint. Install it manually when needed:"
-    echo "    pip3 install weasyprint"
+    info "Skipping PDF dependencies. Install manually when needed:"
+    echo "    pip3 install markdown weasyprint"
     echo "    # if that fails:"
     echo "    sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 libpango-1.0-0"
 fi
