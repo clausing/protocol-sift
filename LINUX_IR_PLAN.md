@@ -57,6 +57,9 @@ from disk images because they live on tmpfs. What UAC does NOT provide: unalloca
 space, deleted file carving, or VSS snapshots. See `linux-artifacts/SKILL.md`
 § UAC Triage Collections for the full command set.
 
+If `$UAC/bodyfile/bodyfile.txt` exists, stage it to `./analysis/bodyfile.txt`, generate
+`mactime -y`, and proceed with the filesystem timeline pass (§ Timeline Integration).
+
 ---
 
 ## Critical — New File: `skills/linux-artifacts/SKILL.md`
