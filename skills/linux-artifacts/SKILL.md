@@ -115,7 +115,7 @@ ls "$UAC"   # confirm structure before proceeding
 | `$UAC/live_response/system/` | `uname`, `lsmod`, `sysctl`, `dmesg` |
 | `$UAC/live_response/packages/` | `dpkg -l`, `rpm -qa` |
 | `$UAC/live_response/hardware/` | `lshw`, `dmidecode` |
-| `$UAC/bodyfile.txt` (or `bodyfile/`) | Pre-generated bodyfile — skip mactime generation |
+| `$UAC/bodyfile/bodyfile.txt` | Pre-generated bodyfile — stage it and run the filesystem timeline pass |
 | `$UAC/etc/`, `$UAC/var/`, `$UAC/home/` | Collected files mirroring original paths |
 
 ```bash
@@ -130,8 +130,13 @@ cat "$UAC/live_response/system/lsmod.txt"     2>/dev/null
 ls "$UAC/dev/shm/" 2>/dev/null
 ls "$UAC/run/"     2>/dev/null
 
-# Pre-generated bodyfile (sort by mtime for quick timeline)
-sort -t'|' -k9 -n "$UAC"/bodyfile*.txt 2>/dev/null | tee ./exports/uac_bodyfile_sorted.txt
+# Filesystem timeline — if UAC collected a bodyfile, stage it and generate mactime
+if [ -f "$UAC/bodyfile/bodyfile.txt" ]; then
+  cp "$UAC/bodyfile/bodyfile.txt" ./analysis/bodyfile.txt
+  mactime -y -b ./analysis/bodyfile.txt > ./analysis/mactime_y.csv
+  echo "Bodyfile staged → ./analysis/bodyfile.txt; mactime → ./analysis/mactime_y.csv"
+  # Proceed with the full timeline pass: § Timeline Integration below
+fi
 ```
 
 **Adapting disk-image commands to UAC:** replace `/mnt/linux_mount` with `$UAC`.
