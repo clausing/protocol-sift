@@ -1339,5 +1339,5 @@ content from a prior investigation and was not reusable across cases.
 5. `skills/sleuthkit/SKILL.md` — Linux extraction paths
 6. `skills/yara-hunting/SKILL.md` — ELF module + Linux Velociraptor
 7. `global/settings.json` — Linux tool permissions
-8. `case-templates/CLAUDE.md` — Linux case template
+8. `case-templates/linux-CLAUDE.md` — Linux case template with session setup
 9. `install.sh` + `README.md` — installer and documentation updates
