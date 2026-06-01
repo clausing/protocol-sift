@@ -31,7 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |------|--------|-------|
 | `/cases/<case>/disk.E01` | <!-- hostname --> | Full disk (<!-- ~X GB -->) |
 | `/cases/<case>/memory.lime` | <!-- hostname --> | LiME memory image (<!-- X GB -->) |
-| `/cases/<case>/<host>-<date>-uac.tar.gz` | <!-- hostname --> | UAC live triage (<!-- X MB -->) — volatile data; no disk carving |
+| `/cases/<case>/uac-<hostname>-<os>-<datetime>.tar.gz` | <!-- hostname --> | UAC live triage (<!-- X MB -->) — volatile data; no disk carving |
 
 **Read-only — do NOT modify evidence files.**
 Output all analysis to `./analysis/`, `./exports/`, or `./reports/` relative to this directory.
@@ -57,7 +57,7 @@ mkdir -p ./analysis ./exports ./reports
 
 ```bash
 mkdir -p /cases/<case>/uac
-tar -xzf /cases/<case>/<host>-<date>-uac.tar.gz -C /cases/<case>/uac/
+tar -xzf /cases/<case>/uac-<hostname>-<os>-<datetime>.tar.gz -C /cases/<case>/uac/
 UAC=$(ls -d /cases/<case>/uac/uac-*/ | head -1)
 ls "$UAC"   # confirm structure; see linux-artifacts SKILL.md § UAC Triage Collections
 ```

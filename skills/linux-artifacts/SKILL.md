@@ -99,7 +99,7 @@ have a UAC collection instead of (or alongside) an E01, adapt the workflow as fo
 ```bash
 # Extract the archive
 mkdir -p /cases/<case>/uac
-tar -xzf /cases/<case>/<hostname>-<date>-uac.tar.gz -C /cases/<case>/uac/
+tar -xzf /cases/<case>/uac-<hostname>-<os>-<datetime>.tar.gz -C /cases/<case>/uac/
 
 # Locate the UAC root (top-level extracted directory)
 UAC=$(ls -d /cases/<case>/uac/uac-*/ 2>/dev/null | head -1)

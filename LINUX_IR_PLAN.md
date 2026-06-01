@@ -46,7 +46,7 @@ Linux IR evidence typically arrives as one or more of these:
 
 ```bash
 mkdir -p /cases/<case>/uac
-tar -xzf /cases/<case>/<host>-<date>-uac.tar.gz -C /cases/<case>/uac/
+tar -xzf /cases/<case>/uac-<hostname>-<os>-<datetime>.tar.gz -C /cases/<case>/uac/
 UAC=$(ls -d /cases/<case>/uac/uac-*/ | head -1)
 ls "$UAC"   # confirm structure before proceeding
 ```
