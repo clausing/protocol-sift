@@ -860,14 +860,31 @@ grep -Ei '(Pre|Post)-Invoke|Pre-Install-Pkgs' ./exports/apt_hooks.txt | \
 # is the indicator. A real sshd lives in /usr/sbin/sshd, never /root/.backup/sshd.
 # Treat every entry as malicious until proven otherwise by hash or package provenance.
 
-# For each flagged path: confirm ELF type, check mtime, and hash for threat intel
+# Timestamps on the conf files that contain hook directives — mtime/ctime shows
+# when the hook was planted; crtime shows "-" if filesystem lacks birth-time support.
+grep -rl "Pre-Invoke\|Post-Invoke\|Pre-Install-Pkgs\|Post-Install-Pkgs" \
+  /mnt/linux_mount/etc/apt/apt.conf \
+  /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null | \
+while IFS= read -r f; do
+  echo "=== $f ==="
+  stat -c "  atime:  %x
+  mtime:  %y
+  ctime:  %z
+  crtime: %w" "$f" 2>/dev/null
+done | tee ./exports/apt_hook_conf_timestamps.txt
+
+# For each flagged binary: confirm ELF type, all timestamps, and hash for threat intel
 while IFS= read -r line; do
   binary=$(echo "$line" | grep -oP '"\K[^"]+' | awk '{print $1}')
   [ -z "$binary" ] && continue
   target="/mnt/linux_mount${binary}"
   echo "=== $binary ==="
   file "$target" 2>/dev/null || echo "(not found on disk)"
-  stat -c "  mtime: %y  size: %s bytes" "$target" 2>/dev/null
+  stat -c "  atime:  %x
+  mtime:  %y
+  ctime:  %z
+  crtime: %w
+  size:   %s bytes" "$target" 2>/dev/null
   sha256sum "$target" 2>/dev/null | awk '{print "  sha256:", $1}'
 done < ./exports/apt_hooks_suspicious.txt | tee ./exports/apt_hooks_binaries.txt
 
