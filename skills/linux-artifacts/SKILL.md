@@ -892,9 +892,18 @@ grep -Hl \
   $(cat ./exports/package_manager_plugins.txt) 2>/dev/null | \
   tee ./exports/package_manager_plugins_suspicious.txt
 
-# Show the matching lines with context for each flagged plugin
+# Show matching lines plus all timestamps for each content-flagged plugin.
+# (Loop reads package_manager_plugins_suspicious.txt — only files that matched
+# the grep -Hl above, so stat runs only on confirmed content hits.)
+# ctime reveals permission/ownership changes even if mtime was backdated;
+# crtime (birth) shows "-" on filesystems without birth-time support — use
+# debugfs -R "stat <inode>" /dev/<device> on ext4 to retrieve it from the inode.
 while IFS= read -r plugin; do
   echo "=== $plugin ==="
+  stat -c "  atime:  %x
+  mtime:  %y
+  ctime:  %z
+  crtime: %w" "$plugin" 2>/dev/null
   grep -n \
     -e "subprocess" -e "os\.system" -e "os\.popen" -e "os\.exec" \
     -e "socket\." -e "urllib" -e "requests\." \
