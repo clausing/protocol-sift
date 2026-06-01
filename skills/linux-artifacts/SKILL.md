@@ -854,12 +854,21 @@ grep -Ei '(Pre|Post)-Invoke|Pre-Install-Pkgs' ./exports/apt_hooks.txt | \
   grep -E '"' | \
   tee ./exports/apt_hooks_suspicious.txt
 
-# For any flagged commands, check whether the target binary actually exists on disk
+# TRIAGE: ANY non-empty output above is a confirmed finding.
+# Attackers routinely name backdoors after legitimate services (sshd, cron, systemd,
+# NetworkManager) to defeat casual review. The binary NAME is irrelevant — the PATH
+# is the indicator. A real sshd lives in /usr/sbin/sshd, never /root/.backup/sshd.
+# Treat every entry as malicious until proven otherwise by hash or package provenance.
+
+# For each flagged path: confirm ELF type, check mtime, and hash for threat intel
 while IFS= read -r line; do
   binary=$(echo "$line" | grep -oP '"\K[^"]+' | awk '{print $1}')
   [ -z "$binary" ] && continue
   target="/mnt/linux_mount${binary}"
-  echo "=== $binary ===" && file "$target" 2>/dev/null || echo "(not found on disk)"
+  echo "=== $binary ==="
+  file "$target" 2>/dev/null || echo "(not found on disk)"
+  stat -c "  mtime: %y  size: %s bytes" "$target" 2>/dev/null
+  sha256sum "$target" 2>/dev/null | awk '{print "  sha256:", $1}'
 done < ./exports/apt_hooks_suspicious.txt | tee ./exports/apt_hooks_binaries.txt
 
 # DNF/Yum plugins (RHEL/CentOS/Fedora) — Python modules loaded by the package manager
