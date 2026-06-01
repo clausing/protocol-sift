@@ -394,19 +394,33 @@ ls /opt/volatility3-*/volatility3/symbols/linux/
 # Confirm linux.info loads (this is your symbol test)
 python3 /opt/volatility3-2.20.0/vol.py -f <image.lime> linux.info
 
-# If no ISF exists — generate one from the kernel debug package
-# Step 1: determine the exact kernel version from the image
+# Determine the exact kernel version from the image (needed for all options below)
 strings <image.lime> | grep "Linux version" | head -3
 
-# Step 2: install the matching debug package on the SIFT workstation
-sudo apt install linux-image-<exact-kernel-version>-dbg
+# Option 2: btf2json — kernels ≥5.2, no debug package needed (preferred over dwarf2json)
+# Requires uncompressed vmlinux (ELF); most distros ship only compressed vmlinuz.
 
-# Step 3: generate the ISF with dwarf2json
+# Check which is available on the mounted image:
+ls /mnt/linux_mount/boot/vmlinux-<version>  2>/dev/null && echo "uncompressed present" || \
+  echo "only vmlinuz — must extract"
+
+# If only vmlinuz: decompress with extract-vmlinux (a shell script, not arch-specific)
+sudo apt install linux-headers-generic   # provides extract-vmlinux in any version
+/usr/src/linux-headers-$(uname -r)/scripts/extract-vmlinux \
+  /mnt/linux_mount/boot/vmlinuz-<version> > /tmp/vmlinux-<version>
+file /tmp/vmlinux-<version>   # confirm: should say "ELF 64-bit LSB executable"
+
+# Generate the ISF:
+btf2json --btf /tmp/vmlinux-<version> \
+         --map /mnt/linux_mount/boot/System.map-<version> \
+  > /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
+xz /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
+
+# Option 3: dwarf2json — fallback for kernels <5.2 or when BTF is absent
+sudo apt install linux-image-<exact-kernel-version>-dbg
 dwarf2json linux \
   --elf /usr/lib/debug/boot/vmlinux-<exact-kernel-version> \
   > /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
-
-# Step 4: compress (Volatility 3 reads .json.xz natively — saves ~10x space)
 xz /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
 
 # Pre-built ISFs for common Ubuntu/Debian/CentOS kernels:
@@ -448,6 +462,8 @@ vol -f <image.lime> linux.info
 ### Standard Opening Set
 
 ```bash
+mkdir -p ./analysis/memory ./exports/malfind ./exports/memdump
+
 # Process enumeration — run both, compare
 vol -f <image.lime> linux.pslist > ./analysis/memory/pslist.txt
 vol -f <image.lime> linux.psscan > ./analysis/memory/psscan.txt
@@ -470,8 +486,13 @@ vol -f <image.lime> linux.bash > ./analysis/memory/bash_history.txt
 vol -f <image.lime> linux.lsmod > ./analysis/memory/lsmod.txt
 # Any module in check_modules output NOT in lsmod = hidden LKM rootkit
 
-# Code injection
+# Code injection — dump suspicious regions for triage
 vol -f <image.lime> linux.malfind --dump --output-dir ./exports/malfind/
+
+# Process memory dump for a specific suspicious PID
+# (dumps each mapped region as a separate file — use after malfind or pslist identifies a target)
+vol -f <image.lime> linux.proc_maps --pid <PID> --dump \
+  --output-dir ./exports/memdump/
 ```
 
 ### Linux Six-Step Analysis Methodology
