@@ -911,6 +911,8 @@ vol -f <image.img> linux.info
 
 ```bash
 # Standard opening set for Linux IR
+mkdir -p ./analysis/memory ./exports/malfind ./exports/memdump
+
 vol -f <image.img> linux.pslist  > ./analysis/memory/pslist.txt
 vol -f <image.img> linux.psscan  > ./analysis/memory/psscan.txt
 vol -f <image.img> linux.psaux   > ./analysis/memory/psaux.txt
@@ -932,6 +934,11 @@ vol -f <image.img> linux.lsmod         > ./analysis/memory/lsmod.txt
 
 # Code injection (same concept as Windows malfind)
 vol -f <image.img> linux.malfind --dump --output-dir ./exports/malfind/
+
+# Per-process memory dump for a specific suspicious PID
+# (use after pslist/malfind identifies a target process)
+vol -f <image.img> linux.proc_maps --pid <PID> --dump \
+  --output-dir ./exports/memdump/
 ```
 
 #### Linux-Specific Six-Step Methodology
