@@ -187,13 +187,19 @@ echo "  Start a new case:"
 echo
 echo "    export CASE=CLIENT-IR-2025-001"
 echo "    mkdir -p /cases/\${CASE}/{analysis,exports,reports}"
+echo
+echo "    # Windows case:"
 echo "    cp \${HOME}/.claude/case-templates/CLAUDE.md /cases/\${CASE}/CLAUDE.md"
+echo
+echo "    # Linux case:"
+echo "    cp \${HOME}/.claude/case-templates/linux-CLAUDE.md /cases/\${CASE}/CLAUDE.md"
+echo
 echo "    cp \${HOME}/.claude/analysis-scripts/md2pdf.py \\"
 echo "       /cases/\${CASE}/analysis/"
 echo "    nano /cases/\${CASE}/CLAUDE.md   # fill in case details"
 echo "    cd /cases/\${CASE} && claude"
 echo
-echo "  Customise the case template before use — it ships with SRL FOR508 demo data."
+echo "  Customise the case template before use — the Windows template ships with SRL FOR508 demo data."
 echo
 echo "  Do NOT copy ~/.claude/.credentials.json — it contains your API key."
 echo "──────────────────────────────────────────────────────────────────────────"
