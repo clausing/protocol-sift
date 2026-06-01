@@ -1265,6 +1265,133 @@ rpm --root=/mnt/linux_mount -qa \
 
 ---
 
+## Timeline Integration
+
+Pattern-based SKILL checks find artifacts by **location and content**.
+A filesystem timeline or Plaso supertimeline adds **time-based discovery** — find what was missed,
+confirm timing, and reconstruct the attacker's session. These are complementary, not overlapping.
+
+| Format | Source | Content |
+|--------|--------|---------|
+| **bodyfile** | `fls -r -m / <image>` (Sleuth Kit) | Pipe-delimited, epoch timestamps, all four MAC+b per inode |
+| **mactime** | `mactime -b bodyfile.txt` | Comma-delimited, human-readable dates |
+| **mactime -y** | `mactime -y -b bodyfile.txt` | Comma-delimited, ISO 8601 — easiest to filter |
+| **l2tcsv** | `psort.py -o l2tcsv plaso.sqlite` | Plaso CSV — filesystem + log sources in one timeline |
+| **dynamic** | `psort.py -o dynamic plaso.sqlite` | Plaso richer CSV, similar columns to l2tcsv |
+
+> Bodyfile and mactime generation: see `@~/.claude/skills/sleuthkit/SKILL.md`.
+> Plaso supertimeline generation: see `@~/.claude/skills/plaso-timeline/SKILL.md`.
+
+### Format Identification
+
+```bash
+# Identify format from header / first data line
+head -2 ./analysis/timeline.*
+
+# bodyfile:   pipe-delimited; first field is MD5 hash (32 hex chars) or "0"
+# mactime:    comma-delimited; date field looks like "Mon Jan 15 2024 02:13:47"
+# mactime -y: header "Date,Size,Type,Mode,UID/GID,Inode,File Name"
+# l2tcsv:     header "datetime,timestamp_desc,source,source_long,message,parser,display_name,tag"
+# dynamic:    similar header to l2tcsv; may include additional columns
+```
+
+### Time-Window Sweep — All Files Modified During the Attack Window
+
+Set T1/T2 from auth log timestamps, audit records, or an initial confirmed finding.
+**Use ctime** ($10 in bodyfile) — it reflects the actual write time even when mtime was backdated.
+
+```bash
+# --- bodyfile ---
+# Convert from human-readable: date -d "2024-01-15 02:00:00 UTC" +%s
+T1=1705276800
+T2=1705363199
+awk -F'|' -v t1=$T1 -v t2=$T2 \
+  '$10 >= t1 && $10 <= t2 {printf "%s\t%s\n", $10, $2}' ./analysis/bodyfile.txt | \
+  sort -n | tee ./exports/timeline_window.txt
+
+# --- mactime -y (ISO timestamps) ---
+D1="2024-01-15 00:00:00"
+D2="2024-01-15 23:59:59"
+awk -F, -v d1="$D1" -v d2="$D2" \
+  'NR>1 && $1>=d1 && $1<=d2' ./analysis/mactime_y.csv | \
+  tee ./exports/timeline_window.txt
+
+# --- l2tcsv / dynamic (Plaso supertimeline) ---
+# All sources (auth log, filestat, syslog, etc.) in one sorted view:
+awk -F, 'NR>1 && $1>="2024-01-15T00:00:00" && $1<="2024-01-15T23:59:59"' \
+  ./analysis/plaso_supertimeline.csv | tee ./exports/timeline_window.txt
+
+# Filesystem events only (source == FILE, parser == filestat):
+grep ",FILE," ./exports/timeline_window.txt | tee ./exports/timeline_window_fs.txt
+```
+
+### IOC Cross-Reference — Confirm SKILL Findings in the Timeline
+
+Bodyfile and mactime paths are image-root-relative (`/root/.backup/sshd`).
+Strip the `/mnt/linux_mount` prefix before searching. Plaso paths are also prefix-free.
+
+```bash
+# Build a deduplicated list of flagged paths from SKILL exports
+{
+  grep -oP '"\K/[^"]+' ./exports/apt_hooks_suspicious.txt 2>/dev/null
+  cat ./exports/package_manager_plugins_suspicious.txt 2>/dev/null
+  cat ./exports/new_executables.txt 2>/dev/null
+  grep -oP '(?<=/mnt/linux_mount)[^\s"]+' \
+    ./exports/apt_hooks_binaries.txt ./exports/suid_binaries.txt 2>/dev/null
+} | sed 's|^/mnt/linux_mount||' | sort -u > /tmp/ioc_paths.txt
+
+# Look up each path in the timeline (works for all formats)
+while IFS= read -r path; do
+  hits=$(grep -cF "$path" ./analysis/timeline.* 2>/dev/null || true)
+  [ "$hits" -gt 0 ] && echo "=== $path ===" && grep -hF "$path" ./analysis/timeline.*
+done < /tmp/ioc_paths.txt | tee ./exports/timeline_ioc_hits.txt
+```
+
+### Cluster Pivot — Find the Full Toolkit Drop
+
+Attackers drop their entire toolkit in one session. Taking the ctime of a confirmed malicious
+file and finding everything within ±60 seconds routinely surfaces implants that pattern checks
+missed because they were in unusual locations or had innocuous names.
+
+```bash
+# --- bodyfile ---
+# bodyfile fields: MD5|name|inode|mode|UID|GID|size|atime|mtime|ctime|crtime
+#                   $1   $2   $3   $4  $5  $6  $7   $8   $9   $10  $11
+PIVOT_CTIME=$(awk -F'|' '/\/root\/.backup\/sshd/{print $10; exit}' ./analysis/bodyfile.txt)
+echo "Pivot ctime: $PIVOT_CTIME  ($(date -d @$PIVOT_CTIME -u '+%Y-%m-%d %H:%M:%S UTC'))"
+
+awk -F'|' -v t=$PIVOT_CTIME \
+  '$10 >= t-60 && $10 <= t+60 {printf "%s\t%s\n", $10, $2}' \
+  ./analysis/bodyfile.txt | sort -n | tee ./exports/timeline_cluster.txt
+
+# --- l2tcsv / dynamic (Plaso) ---
+# The supertimeline pivot reveals correlated log events (SSH logins, commands, etc.)
+# in addition to filesystem writes — reconstruct the full attacker session.
+PIVOT_MINUTE="2024-01-15T02:13"   # same-minute window is usually sufficient
+grep "^${PIVOT_MINUTE}" ./analysis/plaso_supertimeline.csv | \
+  tee ./exports/timeline_cluster.txt
+```
+
+### Backdating Detection — mtime vs ctime Discrepancy
+
+`touch -t` forges mtime and atime but **cannot** change ctime — ctime always reflects the last
+inode write. A file with a years-old mtime but a recent ctime has been backdated. Requires bodyfile.
+
+```bash
+# Files whose ctime falls in the attack window but mtime is >7 days older
+# (ctime in window = written during the attack; old mtime = backdated to blend in)
+T1=1705276800
+T2=1705363199
+awk -F'|' -v t1=$T1 -v t2=$T2 \
+  '$10 >= t1 && $10 <= t2 && $9 < $10 - 604800 && $2 !~ /^\/(proc|sys|dev|run)/' \
+  ./analysis/bodyfile.txt | \
+  awk -F'|' '{printf "delta:%4dd  mtime: %s  ctime: %s  %s\n",
+    int(($10-$9)/86400), $9, $10, $2}' | \
+  sort -rn | tee ./exports/timeline_backdated.txt
+```
+
+---
+
 ## Key File Paths Reference
 
 | Artifact | Debian / Ubuntu | RHEL / CentOS |
@@ -1349,4 +1476,9 @@ rpm --root=/mnt/linux_mount -qa \
 | chkrootkit output | `./exports/chkrootkit_output.txt` |
 | Modified system files | `./exports/modified_system_files.txt` |
 | YARA hits | `./exports/yara_hits/` |
+| Timeline window (attack window filter) | `./exports/timeline_window.txt` |
+| Timeline window — filesystem only (Plaso) | `./exports/timeline_window_fs.txt` |
+| Timeline IOC cross-reference | `./exports/timeline_ioc_hits.txt` |
+| Timeline cluster pivot | `./exports/timeline_cluster.txt` |
+| Backdated files (mtime/ctime discrepancy) | `./exports/timeline_backdated.txt` |
 | Reports | `./reports/` |
