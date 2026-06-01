@@ -841,9 +841,26 @@ grep -rh "pam_" /mnt/linux_mount/etc/pam.d/ | \
 
 # APT hooks (Debian/Ubuntu) — execute arbitrary commands during package operations
 # Directives: DPkg::Pre-Install-Pkgs, DPkg::Post-Invoke, APT::Update::Pre-Invoke, etc.
-ls /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null
-grep -rh "DPkg::\|APT::Update::" /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null | \
+# Check both the main config and the drop-in directory.
+grep -rh "DPkg::\|APT::Update::\|APT::Get::" \
+  /mnt/linux_mount/etc/apt/apt.conf \
+  /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null | \
   tee ./exports/apt_hooks.txt
+
+# Flag hook commands that reference non-standard paths — hidden dirs (.backup, .cache),
+# staging areas (/tmp, /var/tmp, /dev/shm), or paths outside /usr/bin /bin /sbin.
+grep -Ei '(Pre|Post)-Invoke|Pre-Install-Pkgs' ./exports/apt_hooks.txt | \
+  grep -Ev '"[[:space:]]*/?(usr/|usr/local/|s?bin/|lib/)' | \
+  grep -E '"' | \
+  tee ./exports/apt_hooks_suspicious.txt
+
+# For any flagged commands, check whether the target binary actually exists on disk
+while IFS= read -r line; do
+  binary=$(echo "$line" | grep -oP '"\K[^"]+' | awk '{print $1}')
+  [ -z "$binary" ] && continue
+  target="/mnt/linux_mount${binary}"
+  echo "=== $binary ===" && file "$target" 2>/dev/null || echo "(not found on disk)"
+done < ./exports/apt_hooks_suspicious.txt | tee ./exports/apt_hooks_binaries.txt
 
 # DNF/Yum plugins (RHEL/CentOS/Fedora) — Python modules loaded by the package manager
 ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null

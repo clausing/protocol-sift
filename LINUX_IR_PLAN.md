@@ -490,8 +490,15 @@ find /mnt/linux_mount/home /mnt/linux_mount/root \
   xargs grep -li "ProxyCommand\|ControlMaster" 2>/dev/null
 
 # APT hooks (Debian/Ubuntu) — execute on every apt/dpkg operation
-ls /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null
-grep -rh "DPkg::\|APT::Update::" /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null
+# Check main config and drop-in directory; flag commands outside standard bin paths.
+grep -rh "DPkg::\|APT::Update::\|APT::Get::" \
+  /mnt/linux_mount/etc/apt/apt.conf \
+  /mnt/linux_mount/etc/apt/apt.conf.d/ 2>/dev/null | \
+  tee ./exports/apt_hooks.txt
+grep -Ei '(Pre|Post)-Invoke|Pre-Install-Pkgs' ./exports/apt_hooks.txt | \
+  grep -Ev '"[[:space:]]*/?(usr/|usr/local/|s?bin/|lib/)' | \
+  grep -E '"' | \
+  tee ./exports/apt_hooks_suspicious.txt
 
 # DNF/Yum plugins (RHEL/CentOS/Fedora) — Python loaded by package manager
 ls /mnt/linux_mount/etc/dnf/plugins/ 2>/dev/null
