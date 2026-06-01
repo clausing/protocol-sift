@@ -1282,6 +1282,13 @@ cp skills/linux-artifacts/SKILL.md ~/.claude/skills/linux-artifacts/SKILL.md
 
 And add the manual install reference in `README.md`.
 
+Add `markdown` to the optional PDF dependency prompt alongside `weasyprint`
+(required by `analysis-scripts/md2pdf.py`):
+
+```bash
+pip3 install markdown weasyprint
+```
+
 ---
 
 ## Implementation Order
