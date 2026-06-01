@@ -1322,7 +1322,16 @@ cp "$REPO_DIR/analysis-scripts/md2pdf.py" "$CLAUDE_DIR/analysis-scripts/md2pdf.p
 ```
 
 Also update the "Start a new case" quickstart example at the bottom of install.sh
-to reference `md2pdf.py` instead of `generate_pdf_report.py`.
+to reference `md2pdf.py` instead of `generate_pdf_report.py`, and show both
+case template options as commented alternatives:
+
+```bash
+# Windows case:
+cp ${HOME}/.claude/case-templates/CLAUDE.md /cases/${CASE}/CLAUDE.md
+
+# Linux case:
+cp ${HOME}/.claude/case-templates/linux-CLAUDE.md /cases/${CASE}/CLAUDE.md
+```
 
 ### New: `analysis-scripts/md2pdf.py`
 
