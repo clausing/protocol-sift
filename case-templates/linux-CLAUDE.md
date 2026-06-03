@@ -136,21 +136,23 @@ IMG="/cases/<case>/memory.lime"
 $VOL -f $IMG linux.info
 
 # Process enumeration
-$VOL -f $IMG linux.pslist | tee ./exports/pslist.txt
-$VOL -f $IMG linux.psaux  | tee ./exports/psaux.txt
+mkdir -p ./analysis/memory
+
+$VOL -f $IMG linux.pslist | tee ./analysis/memory/pslist.txt
+$VOL -f $IMG linux.psaux  | tee ./analysis/memory/psaux.txt
 
 # Rootkit checks (run on every Linux case)
-$VOL -f $IMG linux.check_syscall | tee ./exports/check_syscall.txt
-$VOL -f $IMG linux.check_modules | tee ./exports/check_modules.txt
-$VOL -f $IMG linux.check_creds   | tee ./exports/check_creds.txt
-$VOL -f $IMG linux.tty_check     | tee ./exports/tty_check.txt
-$VOL -f $IMG linux.netfilter     | tee ./exports/netfilter.txt
+$VOL -f $IMG linux.check_syscall | tee ./analysis/memory/check_syscall.txt
+$VOL -f $IMG linux.check_modules | tee ./analysis/memory/check_modules.txt
+$VOL -f $IMG linux.check_creds   | tee ./analysis/memory/check_creds.txt
+$VOL -f $IMG linux.tty_check     | tee ./analysis/memory/tty_check.txt
+$VOL -f $IMG linux.netfilter     | tee ./analysis/memory/netfilter.txt
 
 # Bash history from memory (survives even if .bash_history was cleared)
-$VOL -f $IMG linux.bash | tee ./exports/memory_bash_history.txt
+$VOL -f $IMG linux.bash | tee ./analysis/memory/bash_history.txt
 
 # Network connections
-$VOL -f $IMG linux.netstat | tee ./exports/memory_netstat.txt
+$VOL -f $IMG linux.netstat | tee ./analysis/memory/netstat.txt
 ```
 
 > **Symbol table:** Volatility 3 Linux requires a per-kernel ISF file.
