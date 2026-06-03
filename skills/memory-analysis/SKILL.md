@@ -30,7 +30,7 @@ alias vol="/opt/volatility3-2.20.0/vol.py"
 sudo su
 
 # Create output dirs before starting
-mkdir -p ./analysis/memory/dumpfiles ./analysis/memory/malfind ./analysis/memory/memdump
+mkdir -p ./analysis/memory ./exports/dumpfiles ./exports/malfind ./exports/memdump
 ```
 
 **Output renderers** (use `-r <renderer>` flag):
@@ -153,7 +153,7 @@ vol -f <image.img> windows.registry.userassist > ./analysis/memory/userassist.tx
 ```bash
 # Primary injection scanner — finds RWX regions with PE headers or shellcode
 vol -f <image.img> windows.malfind > ./analysis/memory/malfind.txt
-vol -f <image.img> windows.malfind --dump --output-dir ./analysis/memory/malfind/
+vol -f <image.img> windows.malfind --dump --output-dir ./exports/malfind/
 
 # VAD (Virtual Address Descriptor) tree — inspect all memory regions for a process
 vol -f <image.img> windows.vadinfo --pid <PID> > ./analysis/memory/vadinfo_<PID>.txt
@@ -181,24 +181,24 @@ vol -f <image.img> windows.filescan > ./analysis/memory/filescan.txt
 # Dump a file by virtual offset (from filescan)
 vol -f <image.img> windows.dumpfiles \
   --virtaddr <0xffffff...> \
-  --output-dir ./analysis/memory/dumpfiles/
+  --output-dir ./exports/dumpfiles/
 
 # Dump a process executable to disk
 vol -f <image.img> windows.pslist --dump --pid <PID>
 
 # Dump all mapped memory pages for a process
-vol -f <image.img> windows.memmap --dump --pid <PID> --output-dir ./analysis/memory/memdump/
+vol -f <image.img> windows.memmap --dump --pid <PID> --output-dir ./exports/memdump/
 ```
 
 ### Strings Extraction from Process Memory
 
 ```bash
 # Step 1: dump process memory
-vol -f <image.img> windows.memmap --dump --pid <PID> --output-dir ./analysis/memory/memdump/
+vol -f <image.img> windows.memmap --dump --pid <PID> --output-dir ./exports/memdump/
 
 # Step 2: extract ASCII and Unicode strings (min 8 chars to reduce noise)
-strings -a -n 8  ./analysis/memory/memdump/pid.<PID>.dmp > ./analysis/memory/strings_<PID>_ascii.txt
-strings -a -el -n 8 ./analysis/memory/memdump/pid.<PID>.dmp > ./analysis/memory/strings_<PID>_unicode.txt
+strings -a -n 8  ./exports/memdump/pid.<PID>.dmp > ./analysis/memory/strings_<PID>_ascii.txt
+strings -a -el -n 8 ./exports/memdump/pid.<PID>.dmp > ./analysis/memory/strings_<PID>_unicode.txt
 
 # Step 3: hunt for IOC patterns
 grep -Ei "(https?://|ftp://|\\\\\\\\|cmd\.exe|powershell|regsvr|certutil)" \
@@ -361,9 +361,9 @@ sudo /opt/volatility3-2.20.0/vol.py -f <image.img> windows.psscan
 | Output | Path |
 |--------|------|
 | Volatility text output | `./analysis/memory/` |
-| Dumped files from filescan | `./analysis/memory/dumpfiles/` |
-| Malfind dumps | `./analysis/memory/malfind/` |
-| Process memory dumps | `./analysis/memory/memdump/` |
+| Dumped files from filescan | `./exports/dumpfiles/` |
+| Malfind dumps | `./exports/malfind/` |
+| Process memory dumps | `./exports/memdump/` |
 | Baseline comparison CSVs | `./analysis/memory/proc_baseline.csv` etc. |
 | Memory bodyfile/timeline | `./analysis/memory/mem_timeline.txt` |
 
@@ -462,37 +462,37 @@ vol -f <image.lime> linux.info
 ### Standard Opening Set
 
 ```bash
-mkdir -p ./analysis/memory/malfind ./analysis/memory/memdump
+mkdir -p ./exports/malfind ./exports/memdump
 
 # Process enumeration — run both, compare
-vol -f <image.lime> linux.pslist > ./analysis/memory/pslist.txt
-vol -f <image.lime> linux.psscan > ./analysis/memory/psscan.txt
-vol -f <image.lime> linux.psaux  > ./analysis/memory/psaux.txt
+vol -f <image.lime> linux.pslist > ./exports/pslist.txt
+vol -f <image.lime> linux.psscan > ./exports/psscan.txt
+vol -f <image.lime> linux.psaux  > ./exports/psaux.txt
 
 # Network connections
-vol -f <image.lime> linux.netstat > ./analysis/memory/netstat.txt
+vol -f <image.lime> linux.netstat > ./exports/netstat.txt
 
 # Rootkit checks — run on every Linux case
-vol -f <image.lime> linux.check_syscall > ./analysis/memory/check_syscall.txt
-vol -f <image.lime> linux.check_modules > ./analysis/memory/check_modules.txt
-vol -f <image.lime> linux.check_creds   > ./analysis/memory/check_creds.txt
-vol -f <image.lime> linux.tty_check     > ./analysis/memory/tty_check.txt
-vol -f <image.lime> linux.netfilter     > ./analysis/memory/netfilter.txt
+vol -f <image.lime> linux.check_syscall > ./exports/check_syscall.txt
+vol -f <image.lime> linux.check_modules > ./exports/check_modules.txt
+vol -f <image.lime> linux.check_creds   > ./exports/check_creds.txt
+vol -f <image.lime> linux.tty_check     > ./exports/tty_check.txt
+vol -f <image.lime> linux.netfilter     > ./exports/netfilter.txt
 
 # Bash history from memory (survives even if .bash_history was deleted)
-vol -f <image.lime> linux.bash > ./analysis/memory/bash_history.txt
+vol -f <image.lime> linux.bash > ./exports/bash_history_memory.txt
 
 # Kernel modules — compare lsmod vs check_modules for hidden LKMs
-vol -f <image.lime> linux.lsmod > ./analysis/memory/lsmod.txt
+vol -f <image.lime> linux.lsmod > ./exports/lsmod.txt
 # Any module in check_modules output NOT in lsmod = hidden LKM rootkit
 
 # Code injection — dump suspicious regions for triage
-vol -f <image.lime> linux.malfind --dump --output-dir ./analysis/memory/malfind/
+vol -f <image.lime> linux.malfind --dump --output-dir ./exports/malfind/
 
 # Process memory dump for a specific suspicious PID
 # (dumps each mapped region as a separate file — use after malfind or pslist identifies a target)
 vol -f <image.lime> linux.proc_maps --pid <PID> --dump \
-  --output-dir ./analysis/memory/memdump/
+  --output-dir ./exports/memdump/
 ```
 
 ### Linux Six-Step Analysis Methodology

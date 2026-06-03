@@ -916,34 +916,34 @@ vol -f <image.img> linux.info
 
 ```bash
 # Standard opening set for Linux IR
-mkdir -p ./analysis/memory/malfind ./analysis/memory/memdump
+mkdir -p ./exports/malfind ./exports/memdump
 
-vol -f <image.img> linux.pslist  > ./analysis/memory/pslist.txt
-vol -f <image.img> linux.psscan  > ./analysis/memory/psscan.txt
-vol -f <image.img> linux.psaux   > ./analysis/memory/psaux.txt
-vol -f <image.img> linux.netstat > ./analysis/memory/netstat.txt
+vol -f <image.img> linux.pslist  > ./exports/pslist.txt
+vol -f <image.img> linux.psscan  > ./exports/psscan.txt
+vol -f <image.img> linux.psaux   > ./exports/psaux.txt
+vol -f <image.img> linux.netstat > ./exports/netstat.txt
 
 # Rootkit checks — run these on every Linux case
-vol -f <image.img> linux.check_syscall  > ./analysis/memory/check_syscall.txt
-vol -f <image.img> linux.check_modules  > ./analysis/memory/check_modules.txt
-vol -f <image.img> linux.check_creds    > ./analysis/memory/check_creds.txt
-vol -f <image.img> linux.tty_check      > ./analysis/memory/tty_check.txt
-vol -f <image.img> linux.netfilter      > ./analysis/memory/netfilter.txt
+vol -f <image.img> linux.check_syscall  > ./exports/check_syscall.txt
+vol -f <image.img> linux.check_modules  > ./exports/check_modules.txt
+vol -f <image.img> linux.check_creds    > ./exports/check_creds.txt
+vol -f <image.img> linux.tty_check      > ./exports/tty_check.txt
+vol -f <image.img> linux.netfilter      > ./exports/netfilter.txt
 
 # Bash history from memory (often survives even if .bash_history was cleared)
-vol -f <image.img> linux.bash > ./analysis/memory/bash_history.txt
+vol -f <image.img> linux.bash > ./exports/bash_history_memory.txt
 
 # Kernel module check: lsmod lists visible modules; check_modules finds hidden ones
-vol -f <image.img> linux.lsmod         > ./analysis/memory/lsmod.txt
+vol -f <image.img> linux.lsmod         > ./exports/lsmod.txt
 # Any module in check_modules output NOT in lsmod = hidden LKM rootkit
 
 # Code injection (same concept as Windows malfind)
-vol -f <image.img> linux.malfind --dump --output-dir ./analysis/memory/malfind/
+vol -f <image.img> linux.malfind --dump --output-dir ./exports/malfind/
 
 # Per-process memory dump for a specific suspicious PID
 # (use after pslist/malfind identifies a target process)
 vol -f <image.img> linux.proc_maps --pid <PID> --dump \
-  --output-dir ./analysis/memory/memdump/
+  --output-dir ./exports/memdump/
 ```
 
 #### Linux-Specific Six-Step Methodology
