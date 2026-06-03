@@ -549,8 +549,12 @@ _dump_hist ksh   -name ".sh_history"           # ksh
 # Red flags across all shell histories
 cat ./exports/*_history_all.txt 2>/dev/null | \
   grep -iE \
-    "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |bash -i|python.*-c|perl.*-e|mkfifo)" \
+    "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |bash -i|python.*-c|perl.*-e|mkfifo|ssh-keygen.*-p)" \
   | tee ./exports/shell_history_suspicious.txt
+# ssh-keygen -p in history: attacker was most likely probing private keys to identify
+# which lack a passphrase — unprotected keys can be used directly for lateral movement
+# without cracking. Passphrase removal is a secondary possibility but requires knowing
+# the current passphrase; probing costs nothing and reveals the same information.
 
 # HISTFILE tampering — attacker may disable history recording
 grep -rE "(HISTSIZE=0|HISTFILESIZE=0|HISTFILE=/dev/null)" \
@@ -751,6 +755,10 @@ grep -iE "(curl|wget|base64|/dev/tcp|nc |ncat |python.*-c)" \
 ```
 
 ### SSH Authorized Keys
+
+If `ssh-keygen -p` appears in shell history, the attacker was likely probing private
+keys to find unprotected ones (no passphrase prompt = usable immediately for lateral
+movement). Cross-reference any unprotected private keys found here against that history.
 
 ```bash
 # All authorized_keys — fingerprint each key for pivot

@@ -94,7 +94,7 @@ Key files to extract and examine:
 - `/etc/shadow` — password hashes (check recently changed entries)
 - `/etc/group` — group memberships (check for unexpected sudo/wheel members)
 - `/etc/sudoers` and `/etc/sudoers.d/` — privilege escalation paths
-- `~/.ssh/authorized_keys` for all users — backdoor key implantation
+- `~/.ssh/authorized_keys` for all users — backdoor key implantation; cross-reference with `ssh-keygen -p` in shell history (attacker probing for unprotected keys)
 - `~/.ssh/config` and `/etc/ssh/ssh_config` — `ProxyCommand` executes arbitrary commands on SSH connect
 
 > **Domain-joined hosts:** Domain accounts (AD via SSSD/winbind, or Azure AD via
@@ -286,8 +286,10 @@ done
 
 # Red flags across all shell histories
 cat ./exports/*_history_all.txt 2>/dev/null | \
-  grep -iE "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |/bin/sh|python.*-c|perl.*-e)" \
+  grep -iE "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |/bin/sh|python.*-c|perl.*-e|ssh-keygen.*-p)" \
   | tee ./exports/shell_history_suspicious.txt
+# ssh-keygen -p: attacker probing for unprotected private keys (no passphrase = usable
+# directly for lateral movement); passphrase removal is secondary — requires knowing it
 
 # HISTFILE tampering indicator: HISTSIZE=0 or HISTFILESIZE=0 in RC files
 grep -rE "(HISTSIZE=0|HISTFILESIZE=0|HISTFILE=/dev/null)" \
