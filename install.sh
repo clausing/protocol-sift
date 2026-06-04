@@ -150,6 +150,52 @@ else
 fi
 echo
 
+# ── btf2json + dwarf2json (Volatility 3 Linux ISF generators) ────────────────
+#
+# btf2json  — preferred; uses embedded BTF (kernels ≥5.2, no debug package needed)
+# dwarf2json — fallback for older kernels; needs the kernel debug package
+
+_install_github_binary() {
+    local name="$1" repo="$2" asset_pattern="$3"
+    local dest="/usr/local/bin/${name}"
+    if command -v "${name}" >/dev/null 2>&1; then
+        ok "${name} already installed: $(command -v "${name}")"
+        return 0
+    fi
+    info "Installing ${name} from github.com/${repo}…"
+    local url
+    url=$(curl -fsSL --max-time 15 \
+        "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null \
+        | grep browser_download_url \
+        | grep -i "${asset_pattern}" \
+        | head -1 \
+        | cut -d'"' -f4) || true
+    if [[ -z "${url}" ]]; then
+        warn "${name}: could not resolve download URL — install manually:"
+        warn "  https://github.com/${repo}/releases"
+        return 0
+    fi
+    local tmp
+    tmp=$(mktemp -t "${name}.XXXXXX")
+    if ! curl -fsSL --max-time 120 "${url}" -o "${tmp}"; then
+        warn "${name}: download failed — install manually:"
+        warn "  https://github.com/${repo}/releases"
+        rm -f "${tmp}"
+        return 0
+    fi
+    chmod +x "${tmp}"
+    if sudo mv "${tmp}" "${dest}" 2>/dev/null; then
+        ok "${name} → ${dest}"
+    else
+        warn "${name}: sudo mv to ${dest} failed — binary left at: ${tmp}"
+    fi
+}
+
+info "Installing Volatility 3 Linux ISF generators…"
+_install_github_binary btf2json   "vobst/btf2json"                  "linux.*x86_64\|x86_64.*linux"
+_install_github_binary dwarf2json "volatilityfoundation/dwarf2json" "linux.*amd64\|amd64.*linux"
+echo
+
 # ── optional: markdown + WeasyPrint (PDF report generation) ──────────────────
 
 if [[ -t 0 ]]; then

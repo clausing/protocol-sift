@@ -1338,6 +1338,13 @@ cp ${HOME}/.claude/case-templates/CLAUDE.md /cases/${CASE}/CLAUDE.md
 cp ${HOME}/.claude/case-templates/linux-CLAUDE.md /cases/${CASE}/CLAUDE.md
 ```
 
+### New: `install.sh` — btf2json + dwarf2json auto-install
+
+`install.sh` now checks for `btf2json` and `dwarf2json` at run time and installs
+the latest GitHub release binary to `/usr/local/bin/` if either is absent.
+Both are skipped silently if already in PATH; failure to download prints a
+`[warn]` with the manual install URL and does not abort the script.
+
 ### New: `analysis-scripts/md2pdf.py`
 
 Generic Markdown-to-PDF converter for turning IR findings reports into
