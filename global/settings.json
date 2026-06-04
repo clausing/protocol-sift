@@ -35,6 +35,8 @@
       "Bash(hfind *)",
 
       "Bash(ewfmount *)",
+      "Bash(ewfinfo *)",
+      "Bash(ewfverify *)",
       "Bash(vshadowmount *)",
       "Bash(kpartx *)",
       "Bash(vgscan *)",
