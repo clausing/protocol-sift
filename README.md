@@ -20,7 +20,7 @@ rules, forensic tool skill files, per-case project templates, and PDF report too
 | SANS SIFT Workstation | Ubuntu x86-64, standard SIFT tool set installed |
 | Claude Code CLI | `npm install -g @anthropic-ai/claude-code` (or via your org's approved channel) |
 | Anthropic API key | Set in `~/.claude/.credentials.json` after first `claude` run — **never copy** this file |
-| Python 3 + WeasyPrint | `pip3 install weasyprint` — required for PDF report generation |
+| Python 3 + WeasyPrint | `pip3 install markdown weasyprint` — required for PDF report generation |
 | dotnet runtime v6 | Pre-installed on SIFT; EZ Tools run against `/opt/zimmermantools/` |
 
 ---
@@ -42,8 +42,9 @@ curl -fsSL https://raw.githubusercontent.com/teamdfir/protocol-sift/main/install
 The script will:
 - Clone this repo into a temporary directory (cleaned up on exit)
 - Back up any existing `~/.claude/{CLAUDE.md,settings.json,settings.local.json}` to `.bak-<timestamp>` before overwriting
-- Install global config, all skills, the case template, and the PDF analysis script into `~/.claude/`
-- Print WeasyPrint install instructions (WeasyPrint prompt is skipped when stdin is piped)
+- Install global config, all skills, case templates, and `md2pdf.py` into `~/.claude/`
+- Auto-install `btf2json` and `dwarf2json` to `/usr/local/bin/` if not already present (Volatility 3 Linux ISF generators)
+- Print markdown + WeasyPrint install instructions (prompt is skipped when stdin is piped)
 
 To also install WeasyPrint in the same step, run the script directly instead:
 
@@ -103,7 +104,7 @@ protocol-sift/
 │   ├── CLAUDE.md                      ← Windows per-case project template   (10)
 │   └── linux-CLAUDE.md               ← Linux per-case project template      (11)
 └── analysis-scripts/
-    └── generate_pdf_report.py         ← WeasyPrint PDF generator        (12)
+    └── md2pdf.py                      ← Markdown → PDF converter         (12)
 ```
 
 ---
@@ -249,55 +250,34 @@ of `~/.claude/case-templates/`.
 
 ---
 
-### (10) analysis-scripts/generate_pdf_report.py → `/cases/<casename>/analysis/generate_pdf_report.py`
+### (12) analysis-scripts/md2pdf.py → `/cases/<casename>/analysis/md2pdf.py`
 
-**What it is:** A reusable WeasyPrint-based PDF report generator. Claude uses this
-as its output engine for all forensic PDF reports. It accepts a `data` dict and an
-`output_path` string and renders an HTML template to PDF.
+**What it is:** A generic Markdown-to-PDF converter. Write your IR findings report
+in Markdown; run this script to produce a styled PDF with page numbers, code block
+formatting, and table styling via WeasyPrint.
 
-**Install:**
+The session setup block in each case template copies this automatically into
+`./analysis/` at the start of every session.
 
-If you used the installer, copy from `~/.claude/analysis-scripts/`:
+**Install manually** (if not using the session setup block):
+
 ```bash
 mkdir -p /cases/<CASENAME>/analysis
-cp ~/.claude/analysis-scripts/generate_pdf_report.py /cases/<CASENAME>/analysis/generate_pdf_report.py
+cp ~/.claude/analysis-scripts/md2pdf.py /cases/<CASENAME>/analysis/md2pdf.py
 ```
 
-If you have the repo or archive available:
+**Dependencies:**
 ```bash
-mkdir -p /cases/<CASENAME>/analysis
-cp analysis-scripts/generate_pdf_report.py /cases/<CASENAME>/analysis/generate_pdf_report.py
-```
-
-**Dependency:**
-```bash
-pip3 install weasyprint
+pip3 install markdown weasyprint
 # If weasyprint fails, also install:
 sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 libpango-1.0-0
 ```
 
-**Usage pattern:** Claude generates a `generate_<topic>_report.py` script per
-investigation that imports this module:
-```python
-import sys
-sys.path.insert(0, './analysis')
-from generate_pdf_report import generate_report
-
-DATA = {
-    "case_id":     "CASE-ID-001",
-    "client":      "Client Name",
-    "prepared_by": "DFIR Consultant",
-    "title":       "Report Title",
-    "subtitle":    "Evidence source · System · Key Finding",
-    "body_html":   BODY,   # MUST be r"""...""" raw string if body contains Windows paths
-}
-generate_report(DATA, "./analysis/report-name.pdf")
+**Usage:**
+```bash
+python3 ./analysis/md2pdf.py ./reports/IR_FINDINGS.md
+python3 ./analysis/md2pdf.py ./reports/IR_FINDINGS.md -o ./reports/ClientName_IR_Report.pdf
 ```
-
-**Critical gotcha:** The `body_html` variable must use a Python **raw string**
-(`r"""..."""`) if it contains Windows filesystem paths (e.g. `C:\Users\...`).
-Otherwise Python will raise a `SyntaxError: unicode error 'unicodeescape'` on `\U`
-and `\S` escape sequences.
 
 ---
 
@@ -322,22 +302,24 @@ mkdir -p ~/.claude/skills/memory-analysis \
          ~/.claude/skills/plaso-timeline \
          ~/.claude/skills/sleuthkit \
          ~/.claude/skills/windows-artifacts \
-         ~/.claude/skills/yara-hunting
+         ~/.claude/skills/yara-hunting \
+         ~/.claude/skills/linux-artifacts
 
 cp skills/memory-analysis/SKILL.md   ~/.claude/skills/memory-analysis/SKILL.md
 cp skills/plaso-timeline/SKILL.md    ~/.claude/skills/plaso-timeline/SKILL.md
 cp skills/sleuthkit/SKILL.md         ~/.claude/skills/sleuthkit/SKILL.md
 cp skills/windows-artifacts/SKILL.md ~/.claude/skills/windows-artifacts/SKILL.md
 cp skills/yara-hunting/SKILL.md      ~/.claude/skills/yara-hunting/SKILL.md
+cp skills/linux-artifacts/SKILL.md   ~/.claude/skills/linux-artifacts/SKILL.md
 
 # 3. Case templates and analysis scripts (reusable across cases)
 mkdir -p ~/.claude/case-templates ~/.claude/analysis-scripts
 cp case-templates/CLAUDE.md       ~/.claude/case-templates/CLAUDE.md
 cp case-templates/linux-CLAUDE.md ~/.claude/case-templates/linux-CLAUDE.md
-cp analysis-scripts/generate_pdf_report.py ~/.claude/analysis-scripts/generate_pdf_report.py
+cp analysis-scripts/md2pdf.py ~/.claude/analysis-scripts/md2pdf.py
 
 # 4. Python dependency for PDF reports
-pip3 install weasyprint
+pip3 install markdown weasyprint
 
 echo "Done. Start a new case with:"
 echo "  export CASE=CLIENT-IR-2025-001"
@@ -346,7 +328,7 @@ echo "  # Windows evidence:"
 echo "  cp ~/.claude/case-templates/CLAUDE.md /cases/\${CASE}/CLAUDE.md"
 echo "  # Linux evidence:"
 echo "  # cp ~/.claude/case-templates/linux-CLAUDE.md /cases/\${CASE}/CLAUDE.md"
-echo "  cp ~/.claude/analysis-scripts/generate_pdf_report.py /cases/\${CASE}/analysis/"
+echo "  cp ~/.claude/analysis-scripts/md2pdf.py /cases/\${CASE}/analysis/"
 echo "  nano /cases/\${CASE}/CLAUDE.md"
 echo "  cd /cases/\${CASE} && claude"
 ```
@@ -386,7 +368,7 @@ cp ~/.claude/case-templates/CLAUDE.md /cases/${CASE}/CLAUDE.md
 #   Linux evidence (use instead of the line above):
 # cp ~/.claude/case-templates/linux-CLAUDE.md /cases/${CASE}/CLAUDE.md
 
-cp ~/.claude/analysis-scripts/generate_pdf_report.py /cases/${CASE}/analysis/
+cp ~/.claude/analysis-scripts/md2pdf.py /cases/${CASE}/analysis/
 nano /cases/${CASE}/CLAUDE.md   # fill in case details
 
 # 2. Mount evidence (example — adjust paths)
