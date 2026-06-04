@@ -108,6 +108,7 @@
       "Bash(modinfo *)",
       "Bash(getfattr *)",
       "Bash(systemctl *)",
+      "Bash(btf2json *)",
       "Bash(dwarf2json *)",
       "Bash(getcap *)",
 
