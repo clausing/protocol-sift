@@ -4,7 +4,8 @@
       "Bash(~/.local/bin/claude:*)",
       "Bash(sudo apt:*)",
       "Bash(apt-cache search:*)",
-      "Bash(psort.py:*)"
+      "Bash(psort.py:*)",
+      "Bash(cp ~/.claude/analysis-scripts/md2pdf.py *)"
     ]
   }
 }
