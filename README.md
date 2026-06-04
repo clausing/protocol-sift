@@ -321,6 +321,22 @@ cp analysis-scripts/md2pdf.py ~/.claude/analysis-scripts/md2pdf.py
 # 4. Python dependency for PDF reports
 pip3 install markdown weasyprint
 
+# 5. Volatility 3 Linux ISF generators (skip if already installed)
+# btf2json — preferred for kernels >=5.2 (uses embedded BTF, no debug package needed)
+# dwarf2json — fallback for older kernels
+for tool in btf2json dwarf2json; do
+  command -v "$tool" >/dev/null 2>&1 && continue
+  case "$tool" in
+    btf2json)   repo="vobst/btf2json";                  pattern="linux.*x86_64\|x86_64.*linux" ;;
+    dwarf2json) repo="volatilityfoundation/dwarf2json"; pattern="linux.*amd64\|amd64.*linux" ;;
+  esac
+  url=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
+    | grep browser_download_url | grep -i "$pattern" | head -1 | cut -d'"' -f4)
+  [ -n "$url" ] && curl -fsSL "$url" -o "/tmp/$tool" && chmod +x "/tmp/$tool" \
+    && sudo mv "/tmp/$tool" "/usr/local/bin/$tool" \
+    || echo "Could not install $tool — see https://github.com/$repo/releases"
+done
+
 echo "Done. Start a new case with:"
 echo "  export CASE=CLIENT-IR-2025-001"
 echo "  mkdir -p /cases/\${CASE}/{analysis,exports,reports}"
