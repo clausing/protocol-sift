@@ -20,6 +20,7 @@ correct tool permissions but zero workflow guidance.
 | Priority | Type | File | Change |
 |----------|------|------|--------|
 | Critical | **New** | `skills/linux-artifacts/SKILL.md` | Full Linux artifact analysis skill (new) |
+| Critical | **New** | `skills/linux-persistence/SKILL.md` | Persistence mechanisms split out from linux-artifacts (size reduction) |
 | Critical | Update | `skills/memory-analysis/SKILL.md` | Add Linux Volatility 3 section |
 | Important | Update | `global/CLAUDE.md` | Add Linux routing entry + tool paths |
 | Important | Update | `skills/plaso-timeline/SKILL.md` | Expand `linux` parser documentation |
