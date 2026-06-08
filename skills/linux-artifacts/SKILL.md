@@ -5,10 +5,10 @@ Use this skill for Linux host-based artifact analysis on the SIFT workstation.
 Covers authentication logs, systemd journal, auditd, shell history, persistence
 mechanisms, rootkit indicators, and artifact extraction from Linux disk images.
 
-> **Evidence mount assumption:** Commands below use `/mnt/linux_mount` as the
-> read-only mount point for the target Linux filesystem. For ext4/XFS/Btrfs/LVM
-> mount procedures, see the **Mount Procedures** section below. For `ewfmount`
-> and `mmls`, see `@~/.claude/skills/sleuthkit/SKILL.md`.
+> **Mount point:** Commands use `/mnt/linux_mount` as the conventional placeholder.
+> The actual mount point is established by the **Mount Procedures** section below or
+> documented in the case `CLAUDE.md` — substitute it throughout if different. For
+> `ewfmount` and `mmls`, see `@~/.claude/skills/sleuthkit/SKILL.md`.
 
 ---
 

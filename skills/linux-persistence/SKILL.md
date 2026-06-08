@@ -10,9 +10,10 @@ locations found on Debian/Ubuntu and RHEL/CentOS/Fedora hosts.
 > auditd, shell history, rootkits, and timeline integration — see
 > `@~/.claude/skills/linux-artifacts/SKILL.md`.
 >
-> **Evidence mount assumption:** Commands below use `/mnt/linux_mount` as the
-> read-only mount point for the target Linux filesystem. For ext4/XFS/Btrfs/LVM
-> mount procedures, see `@~/.claude/skills/sleuthkit/SKILL.md`.
+> **Mount point:** Commands use `/mnt/linux_mount` as the conventional placeholder.
+> Before running any command, check the case `CLAUDE.md` for the actual mount point
+> and substitute it throughout. If `linux-artifacts/SKILL.md` is already loaded, the
+> active mount point is the one established in its Mount Procedures section.
 
 ---
 
