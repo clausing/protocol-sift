@@ -99,12 +99,13 @@ protocol-sift/
 │   ├── sleuthkit/SKILL.md             ← Sleuth Kit / TSK skill          (6)
 │   ├── windows-artifacts/SKILL.md     ← EZ Tools / EVTX / Registry      (7)
 │   ├── yara-hunting/SKILL.md          ← YARA / threat hunting skill     (8)
-│   └── linux-artifacts/SKILL.md       ← Linux logs / persistence / rootkits (9)
+│   ├── linux-artifacts/SKILL.md       ← Linux logs / execution / rootkits / timeline (9)
+│   └── linux-persistence/SKILL.md    ← Linux persistence mechanisms         (10)
 ├── case-templates/
-│   ├── CLAUDE.md                      ← Windows per-case project template   (10)
-│   └── linux-CLAUDE.md               ← Linux per-case project template      (11)
+│   ├── CLAUDE.md                      ← Windows per-case project template   (11)
+│   └── linux-CLAUDE.md               ← Linux per-case project template      (12)
 └── analysis-scripts/
-    └── md2pdf.py                      ← Markdown → PDF converter         (12)
+    └── md2pdf.py                      ← Markdown → PDF converter         (13)
 ```
 
 ---
@@ -173,7 +174,7 @@ cp global/settings.local.json ~/.claude/settings.local.json
 
 ---
 
-### (4–8) skills/ → `~/.claude/skills/`
+### (4–10) skills/ → `~/.claude/skills/`
 
 **What they are:** Skill files are domain-specific prompt libraries that Claude loads
 on demand. Each `SKILL.md` contains exact CLI invocations, common flags, known
@@ -186,7 +187,8 @@ gotchas, and output interpretation guidance for a specific forensic toolset.
 | `sleuthkit/SKILL.md` | Filesystem forensics | fls, icat, mmls, mactime, tsk_recover, ewfmount offsets |
 | `windows-artifacts/SKILL.md` | Windows artifacts | EZ Tools suite, EvtxECmd, MFTECmd, RECmd, AmcacheParser |
 | `yara-hunting/SKILL.md` | Threat hunting | YARA rules (PE + ELF modules), IOC sweeps, Velociraptor |
-| `linux-artifacts/SKILL.md` | Linux artifacts | Logs, persistence, auditd, journal, shell history, rootkit detection |
+| `linux-artifacts/SKILL.md` | Linux artifacts | Logs, execution evidence, auditd, journal, shell history, rootkit detection, timeline integration |
+| `linux-persistence/SKILL.md` | Linux persistence | Cron, systemd, SysV/rc.local, LD_PRELOAD, kernel modules, shell RC, SSH keys, SUID/SGID, APT/DNF hooks, PAM, D-Bus, git hooks |
 
 **Install:**
 ```bash
@@ -195,14 +197,16 @@ mkdir -p ~/.claude/skills/memory-analysis \
          ~/.claude/skills/sleuthkit \
          ~/.claude/skills/windows-artifacts \
          ~/.claude/skills/yara-hunting \
-         ~/.claude/skills/linux-artifacts
+         ~/.claude/skills/linux-artifacts \
+         ~/.claude/skills/linux-persistence
 
-cp skills/memory-analysis/SKILL.md   ~/.claude/skills/memory-analysis/SKILL.md
-cp skills/plaso-timeline/SKILL.md    ~/.claude/skills/plaso-timeline/SKILL.md
-cp skills/sleuthkit/SKILL.md         ~/.claude/skills/sleuthkit/SKILL.md
-cp skills/windows-artifacts/SKILL.md ~/.claude/skills/windows-artifacts/SKILL.md
-cp skills/yara-hunting/SKILL.md      ~/.claude/skills/yara-hunting/SKILL.md
-cp skills/linux-artifacts/SKILL.md   ~/.claude/skills/linux-artifacts/SKILL.md
+cp skills/memory-analysis/SKILL.md    ~/.claude/skills/memory-analysis/SKILL.md
+cp skills/plaso-timeline/SKILL.md     ~/.claude/skills/plaso-timeline/SKILL.md
+cp skills/sleuthkit/SKILL.md          ~/.claude/skills/sleuthkit/SKILL.md
+cp skills/windows-artifacts/SKILL.md  ~/.claude/skills/windows-artifacts/SKILL.md
+cp skills/yara-hunting/SKILL.md       ~/.claude/skills/yara-hunting/SKILL.md
+cp skills/linux-artifacts/SKILL.md    ~/.claude/skills/linux-artifacts/SKILL.md
+cp skills/linux-persistence/SKILL.md  ~/.claude/skills/linux-persistence/SKILL.md
 ```
 
 **How Claude uses them:** The global `CLAUDE.md` contains a routing table that
@@ -211,7 +215,7 @@ reads the skill file at task time — you do not need to invoke them manually.
 
 ---
 
-### (10–11) case-templates/ → `/cases/<casename>/CLAUDE.md`
+### (11–12) case-templates/ → `/cases/<casename>/CLAUDE.md`
 
 **What they are:** Per-case project CLAUDE.md files. When you `cd /cases/<casename>`
 and launch `claude`, this file loads automatically as project-level instructions,
@@ -303,14 +307,16 @@ mkdir -p ~/.claude/skills/memory-analysis \
          ~/.claude/skills/sleuthkit \
          ~/.claude/skills/windows-artifacts \
          ~/.claude/skills/yara-hunting \
-         ~/.claude/skills/linux-artifacts
+         ~/.claude/skills/linux-artifacts \
+         ~/.claude/skills/linux-persistence
 
-cp skills/memory-analysis/SKILL.md   ~/.claude/skills/memory-analysis/SKILL.md
-cp skills/plaso-timeline/SKILL.md    ~/.claude/skills/plaso-timeline/SKILL.md
-cp skills/sleuthkit/SKILL.md         ~/.claude/skills/sleuthkit/SKILL.md
-cp skills/windows-artifacts/SKILL.md ~/.claude/skills/windows-artifacts/SKILL.md
-cp skills/yara-hunting/SKILL.md      ~/.claude/skills/yara-hunting/SKILL.md
-cp skills/linux-artifacts/SKILL.md   ~/.claude/skills/linux-artifacts/SKILL.md
+cp skills/memory-analysis/SKILL.md    ~/.claude/skills/memory-analysis/SKILL.md
+cp skills/plaso-timeline/SKILL.md     ~/.claude/skills/plaso-timeline/SKILL.md
+cp skills/sleuthkit/SKILL.md          ~/.claude/skills/sleuthkit/SKILL.md
+cp skills/windows-artifacts/SKILL.md  ~/.claude/skills/windows-artifacts/SKILL.md
+cp skills/yara-hunting/SKILL.md       ~/.claude/skills/yara-hunting/SKILL.md
+cp skills/linux-artifacts/SKILL.md    ~/.claude/skills/linux-artifacts/SKILL.md
+cp skills/linux-persistence/SKILL.md  ~/.claude/skills/linux-persistence/SKILL.md
 
 # 3. Case templates and analysis scripts (reusable across cases)
 mkdir -p ~/.claude/case-templates ~/.claude/analysis-scripts
