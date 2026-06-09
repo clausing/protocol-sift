@@ -165,7 +165,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p ./analysis/ && echo \"$(date -u): $CONVERSATION_SUMMARY\" >> ./analysis/forensic_audit.log"
+            "command": "mkdir -p ./analysis/ && echo \"$(date -u '+%Y-%m-%dT%H:%M:%SZ') SESSION-CLOSED $(pwd)\" >> ./analysis/forensic_audit.log"
           }
         ]
       }

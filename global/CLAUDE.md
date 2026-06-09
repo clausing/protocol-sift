@@ -26,6 +26,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Output routing** — Write all scripts, CSVs, JSON, and reports to `./analysis/`, `./exports/`, or `./reports/`. Never write to `/` or evidence directories.
 - **Timestamps** — Always output in UTC.
 - **Verification** — Verify tool success after every run. On failure: read stderr → hypothesize → correct → retry.
+- **Session audit** — At the end of every investigation, before delivering final findings,
+  append a structured entry to `./analysis/forensic_audit.log`:
+  ```bash
+  {
+    echo "=== INVESTIGATION SESSION ==="
+    echo "Timestamp : $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "Case dir  : $(pwd)"
+    echo "Artifacts : <key artifact files examined>"
+    echo "Tools     : <tools run, e.g. ausearch, vol.py, log2timeline>"
+    echo "Findings  : <2–4 line narrative of key findings and conclusions>"
+    echo "=== END SESSION ==="
+    echo ""
+  } >> ./analysis/forensic_audit.log
+  ```
 
 ---
 
