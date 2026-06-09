@@ -489,3 +489,182 @@ find /mnt/linux_mount/dev -maxdepth 3 -name ".*" \
 find /mnt/linux_mount/dev -maxdepth 3 -type f -executable \
   2>/dev/null | tee -a ./exports/dev_hidden.txt
 ```
+
+---
+
+### Tool Configuration Files
+
+Terminal multiplexers, editors, and other developer tools load RC files on
+every invocation — a persistence location that survives credential resets and
+is rarely audited.
+
+```bash
+# tmux (~/.tmux.conf)
+# run-shell "<cmd>" fires once at config load; set -g default-command "<cmd>"
+# runs on every new window — both execute without user interaction
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+  f="${user_home}/.tmux.conf"
+  [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+done | tee ./exports/tmux_conf_all.txt
+
+grep -E "^\s*(run(-shell)?|set\s.*default-command|set-option.*default-command)" \
+  ./exports/tmux_conf_all.txt | \
+  grep -iE "(/tmp|/dev/shm|/dev/\.|base64|bash -i|nc |wget|curl)" | \
+  tee ./exports/tmux_conf_suspicious.txt
+
+# Vim / Neovim (~/.vimrc, ~/.vim/vimrc, ~/.config/nvim/init.{vim,lua})
+# system(), jobstart(), luaeval("io.popen"), and autocmd patterns run shell commands;
+# :! in an autocmd executes on file open/write
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+  for rc in .vimrc .vim/vimrc .config/nvim/init.vim .config/nvim/init.lua; do
+    f="${user_home}/${rc}"
+    [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+  done
+done | tee ./exports/vim_rc_all.txt
+# System-level vim config
+for f in /mnt/linux_mount/etc/vim/vimrc /mnt/linux_mount/etc/vim/vimrc.local; do
+  [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+done >> ./exports/vim_rc_all.txt
+
+grep -iE "(system\(|call system|jobstart|io\.popen|luaeval.*popen|autocmd.*!)" \
+  ./exports/vim_rc_all.txt | tee ./exports/vim_rc_suspicious.txt
+
+# GNU Screen (~/.screenrc)
+# exec and shell directives run commands; backtick sets a variable by executing a command
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+  f="${user_home}/.screenrc"
+  [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+done | tee ./exports/screenrc_all.txt
+
+grep -iE "^\s*(exec|shell|backtick)" ./exports/screenrc_all.txt | \
+  grep -iE "(/tmp|/dev/shm|/dev/\.|base64|bash -i|nc |wget|curl)" | \
+  tee ./exports/screenrc_suspicious.txt
+
+# Emacs (~/.emacs, ~/.emacs.d/init.el, ~/.config/emacs/init.el)
+# Elisp can call shell-command, start-process-shell-command, call-process, etc.
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+  for el in .emacs .emacs.d/init.el .config/emacs/init.el; do
+    f="${user_home}/${el}"
+    [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+  done
+done | tee ./exports/emacs_init_all.txt
+
+grep -iE "(shell-command|start-process-shell|call-process|async-shell-command)" \
+  ./exports/emacs_init_all.txt | \
+  grep -iE "(/tmp|/dev/shm|base64|wget|curl|nc |bash)" | \
+  tee ./exports/emacs_init_suspicious.txt
+```
+
+---
+
+### User-Level Systemd Services
+
+User units run under `systemd --user` at login — no root required. The system-level
+service checks above do not cover these paths.
+
+```bash
+find /mnt/linux_mount/home/*/.config/systemd/user/ \
+     /mnt/linux_mount/root/.config/systemd/user/ \
+  \( -name "*.service" -o -name "*.timer" \) -type f 2>/dev/null | \
+  tee ./exports/user_systemd_units.txt
+
+while IFS= read -r f; do
+  echo "=== $f ===" ; cat "$f" 2>/dev/null
+done < ./exports/user_systemd_units.txt | tee ./exports/user_systemd_content.txt
+
+# Flag Exec= lines pointing outside standard system paths
+grep -hE "^(ExecStart|ExecStop|ExecReload|ExecStartPre|ExecStartPost)=" \
+  ./exports/user_systemd_content.txt | \
+  grep -vE "=/usr/|=/bin/|=/sbin/|=/lib/" | \
+  tee ./exports/user_systemd_suspicious.txt
+```
+
+---
+
+### Sudo and Polkit Rules
+
+Sudo NOPASSWD entries and permissive Polkit rules grant password-free privilege
+elevation — they persist across password resets and are often missed in post-incident
+remediation.
+
+```bash
+# Sudo — collect all rules (sudoers + drop-in directory)
+cat /mnt/linux_mount/etc/sudoers 2>/dev/null > ./exports/sudoers.txt
+find /mnt/linux_mount/etc/sudoers.d/ -type f 2>/dev/null | \
+  xargs cat 2>/dev/null >> ./exports/sudoers.txt
+
+# Flag NOPASSWD entries for any account
+grep -v "^#" ./exports/sudoers.txt | grep -i "NOPASSWD" | \
+  tee ./exports/sudoers_nopasswd.txt
+
+# Flag non-standard accounts with sudo rules (unexpected beyond root/wheel/sudo/admin)
+grep -v "^[[:space:]]*#\|^root\|^%sudo\|^%wheel\|^%admin\|^Defaults\|^$" \
+  ./exports/sudoers.txt | tee ./exports/sudoers_nonstandard.txt
+
+# Polkit rules — JS files that govern who can run pkexec actions
+# "return polkit.Result.YES" unconditionally grants privilege to the caller
+find /mnt/linux_mount/usr/share/polkit-1/rules.d/ \
+     /mnt/linux_mount/etc/polkit-1/rules.d/ \
+  -type f -name "*.rules" 2>/dev/null | tee ./exports/polkit_rules.txt
+
+while IFS= read -r f; do
+  echo "=== $f ===" ; cat "$f" 2>/dev/null
+done < ./exports/polkit_rules.txt | tee ./exports/polkit_rules_content.txt
+
+grep -H "polkit\.Result\.YES" \
+  $(cat ./exports/polkit_rules.txt 2>/dev/null) 2>/dev/null | \
+  tee ./exports/polkit_rules_suspicious.txt
+```
+
+---
+
+### Cloud and Container Credential Helpers
+
+These execute a program to retrieve credentials — a malicious helper fires silently
+on every relevant CLI invocation.
+
+```bash
+# AWS CLI (~/.aws/config) — credential_process = <command>
+# Runs a program to vend credentials on every AWS API call
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+  f="${user_home}/.aws/config"
+  [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+done | tee ./exports/aws_config_all.txt
+
+grep -i "credential_process" ./exports/aws_config_all.txt | \
+  grep -iE "(/tmp|/dev/shm|/dev/\.|base64|nc |wget|curl|bash)" | \
+  tee ./exports/aws_credential_process_suspicious.txt
+
+# kubectl (~/.kube/config) — exec auth plugins run a command to retrieve tokens
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+  f="${user_home}/.kube/config"
+  [[ -f "$f" ]] && echo "=== $f ===" && cat "$f"
+done | tee ./exports/kubeconfig_all.txt
+
+# Flag exec command entries that don't match known legitimate auth helpers
+grep -A5 "exec:" ./exports/kubeconfig_all.txt | \
+  grep "command:" | \
+  grep -vE "(gke-gcloud|aws|azure-kubelogin|kubelogin|oidc)" | \
+  tee ./exports/kubeconfig_exec_suspicious.txt
+
+# Docker (~/.docker/config.json) — credsStore / credHelpers name an executable
+# Docker prepends "docker-credential-" and finds it in PATH
+for user_home in /mnt/linux_mount/home/* /mnt/linux_mount/root; do
+  f="${user_home}/.docker/config.json"
+  [[ -f "$f" ]] || continue
+  echo "=== $f ===" && cat "$f"
+  # Resolve and locate the helper binary on the image
+  python3 -c "
+import json, sys
+d = json.load(open('$f'))
+helpers = list(d.get('credHelpers', {}).values())
+cs = d.get('credsStore', '')
+if cs: helpers.append(cs)
+for h in set(helpers): print('docker-credential-' + h)
+" 2>/dev/null | while read -r helper; do
+    echo "  Helper: $helper"
+    find /mnt/linux_mount -name "$helper" 2>/dev/null | \
+      sed 's/^/    found: /'
+  done
+done | tee ./exports/docker_cred_helpers.txt
+```
