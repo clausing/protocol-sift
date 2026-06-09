@@ -135,8 +135,8 @@ cp global/CLAUDE.md ~/.claude/CLAUDE.md
 **What it is:** The main Claude Code permission policy. Pre-approves all DFIR CLI tools
 (Volatility, Sleuth Kit, EZ Tools, Plaso, bulk_extractor, YARA, hash tools, etc.) so
 Claude never pauses to ask permission mid-investigation. Also contains a `Stop` hook
-that writes a forensic audit log entry to `./analysis/forensic_audit.log` at the end
-of every conversation.
+and an in-session audit instruction that together maintain `./analysis/forensic_audit.log`
+for chain-of-custody documentation.
 
 **Install:**
 ```bash
@@ -149,8 +149,11 @@ cp global/settings.json ~/.claude/settings.json
   (prevents Claude from exfiltrating data or wiping evidence)
 - `permissions.defaultMode` — `"acceptEdits"` means file edits in allowed paths
   auto-approve without a prompt
-- `hooks.Stop` — appends conversation summary to `./analysis/forensic_audit.log`
-  for chain-of-custody documentation
+- `hooks.Stop` — appends a `SESSION-CLOSED` timestamp + case directory to
+  `./analysis/forensic_audit.log` whenever the session ends
+- `global/CLAUDE.md` instructs Claude to append a structured session summary
+  (artifacts examined, tools run, key findings) to the same log before delivering
+  final findings — the `Stop` hook entry then acts as a session-close terminator
 
 **Important — Write path restrictions:**
 The `Write` and `Edit` allow-list is scoped to `./analysis/*`, `./reports/*`, and
@@ -403,7 +406,9 @@ claude
 ## Notes on Chain of Custody
 
 - Claude never writes to `/cases/`, `/mnt/`, or `/media/` — enforced by `settings.json`
-- The `Stop` hook appends an audit log entry to `./analysis/forensic_audit.log`
-  after every session — review this log as part of your case documentation
+- Claude appends a structured session summary (artifacts, tools, findings) to
+  `./analysis/forensic_audit.log` before delivering final findings; the `Stop`
+  hook then appends a `SESSION-CLOSED` timestamp as a terminator — review this
+  log as part of your case documentation
 - All tool outputs use `tee` to write to `./exports/` — raw tool output is preserved
 - Always verify image integrity before analysis: `ewfverify /cases/${CASE}/*.E01`
