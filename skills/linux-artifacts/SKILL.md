@@ -468,37 +468,48 @@ cat /mnt/linux_mount/etc/audit/rules.d/*.rules 2>/dev/null
 # Confirm execve auditing was enabled (required to capture command execution)
 grep "execve" /mnt/linux_mount/etc/audit/rules.d/*.rules 2>/dev/null
 
+# List all audit logs present (current + rotated)
+ls /mnt/linux_mount/var/log/audit/audit.log* 2>/dev/null | sort -V
+
+# Consolidate all rotated logs into one file (oldest first; handles optional .gz)
+{
+  for f in $(ls /mnt/linux_mount/var/log/audit/audit.log* 2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/audit_all.log
+echo "Consolidated: $(wc -l < ./exports/audit_all.log) audit records"
+
 # All execution events
 ausearch -i -sc execve \
-  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null | \
+  -f ./exports/audit_all.log 2>/dev/null | \
   tee ./exports/audit_execve.txt
 
 # Specific user's activity by UID
 ausearch -i -ua <uid> \
-  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+  -f ./exports/audit_all.log 2>/dev/null
 
 # Failed authentications
 ausearch -i -m USER_AUTH -sv no \
-  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+  -f ./exports/audit_all.log 2>/dev/null
 
 # Outbound network connections (connect syscall)
 ausearch -i -sc connect \
-  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null | \
+  -f ./exports/audit_all.log 2>/dev/null | \
   tee ./exports/audit_network.txt
 
 # Sudo / privilege escalation commands
 ausearch -i -m USER_CMD \
-  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+  -f ./exports/audit_all.log 2>/dev/null
 
 # Summary reports
-aureport --summary  -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
-aureport -au --summary -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
-aureport -x  --summary -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
-aureport --anomaly  -if /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null
+aureport --summary     -if ./exports/audit_all.log 2>/dev/null
+aureport -au --summary -if ./exports/audit_all.log 2>/dev/null
+aureport -x  --summary -if ./exports/audit_all.log 2>/dev/null
+aureport --anomaly     -if ./exports/audit_all.log 2>/dev/null
 
 # PROCTITLE is hex-encoded — decode it to readable command lines
 ausearch -m EXECVE \
-  -f /mnt/linux_mount/var/log/audit/audit.log 2>/dev/null | \
+  -f ./exports/audit_all.log 2>/dev/null | \
   grep "proctitle=" | python3 -c "
 import sys
 for line in sys.stdin:
@@ -1224,7 +1235,7 @@ sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
 
 # Audit log
 sudo mkdir -p ./exports/audit/
-sudo cp -p /mnt/linux_mount/var/log/audit/audit.log ./exports/audit/ 2>/dev/null
+sudo cp -p /mnt/linux_mount/var/log/audit/audit.log* ./exports/audit/ 2>/dev/null
 
 # Shell histories (all users)
 sudo mkdir -p ./exports/shell_history/
