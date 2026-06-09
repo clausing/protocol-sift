@@ -354,6 +354,34 @@ lastb -F -f /mnt/linux_mount/var/log/btmp 2>/dev/null | \
 lastlog --root /mnt/linux_mount 2>/dev/null | tee ./exports/lastlog.txt
 ```
 
+> **Short SSH sessions — do NOT conclude compromise without corroboration.**
+> Sessions lasting only seconds are common for non-interactive use cases that leave
+> no bash history by design:
+>
+> | Session type | Duration | Bash history? |
+> |---|---|---|
+> | SFTP transfer (`sftp`, `scp`) | Seconds | No — no shell spawned |
+> | Port-forward tunnel (`ssh -N`) | Seconds–minutes | No — no shell |
+> | ProxyJump / bastion hop | Seconds | No — transit only |
+> | Automated health check / Ansible | Seconds | No — script-controlled |
+> | `ControlMaster` multiplexed | Instant | No — reuses master |
+> | Failed key exchange / auth | < 1 s | No — rejected |
+>
+> Before writing any "likely compromise" or "suspicious access" finding, require
+> at least one corroborating artifact:
+> - Shell process spawned: auditd `execve` events for that session, or `SHLVL`
+>   set in the session environment
+> - File exfiltration: SFTP server logs (`Received filename`, `Transferred`),
+>   network byte counts, `/var/log/vsftpd.log`
+> - Execution evidence: bash/zsh/sh history, auditd `execve`, `at` job, cron hit
+> - Privilege escalation: sudo log, setuid exec in auditd, `su` record
+> - Lateral movement: subsequent auth events from a new internal source IP
+>
+> If none are present, report: _"Multiple short SSH sessions observed for
+> \<account\>; no shell activity, execution, or file-transfer evidence found.
+> Consistent with automated tooling, SFTP, or port-forwarding. Investigate
+> further before concluding compromise."_
+
 ---
 
 ## Systemd Journal (journalctl)
