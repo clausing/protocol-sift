@@ -312,33 +312,36 @@ ls /mnt/linux_mount/var/lib/aad/cache/ 2>/dev/null       # Canonical aad-auth ca
 ## Authentication Log Analysis
 
 ```bash
+# Consolidate all auth logs (current + rotated; .gz-aware)
+{
+  for f in $(ls /mnt/linux_mount/var/log/auth.log* \
+                /mnt/linux_mount/var/log/secure*    2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/auth_all.log
+echo "Consolidated: $(wc -l < ./exports/auth_all.log) auth records"
+
 # All successful SSH logins (source IP + user + timestamp)
-grep "Accepted" /mnt/linux_mount/var/log/auth.log 2>/dev/null || \
-grep "Accepted" /mnt/linux_mount/var/log/secure   2>/dev/null | \
-  tee ./exports/ssh_logins_success.txt
+grep "Accepted" ./exports/auth_all.log | tee ./exports/ssh_logins_success.txt
 
 # Top source IPs for successful SSH logins (anomaly pivot)
 awk '{print $11}' ./exports/ssh_logins_success.txt | \
   sort | uniq -c | sort -rn | head -20
 
 # Failed SSH logins (brute force / credential stuffing)
-grep "Failed password" /mnt/linux_mount/var/log/auth.log 2>/dev/null || \
-grep "Failed password" /mnt/linux_mount/var/log/secure   2>/dev/null | \
-  tee ./exports/ssh_logins_failed.txt
+grep "Failed password" ./exports/auth_all.log | tee ./exports/ssh_logins_failed.txt
 
 # Invalid user attempts (probing non-existent accounts)
-grep "Invalid user" /mnt/linux_mount/var/log/auth.log 2>/dev/null
+grep "Invalid user" ./exports/auth_all.log
 
 # Sudo usage with full command
-grep "sudo:" /mnt/linux_mount/var/log/auth.log 2>/dev/null | \
-  grep "COMMAND" | tee ./exports/sudo_usage.txt
+grep "sudo:.*COMMAND" ./exports/auth_all.log | tee ./exports/sudo_usage.txt
 
 # su to root
-grep "session opened for user root" /mnt/linux_mount/var/log/auth.log 2>/dev/null
+grep "session opened for user root" ./exports/auth_all.log
 
 # New user / group creation
-grep -E "(useradd|groupadd|usermod|passwd:)" \
-  /mnt/linux_mount/var/log/auth.log 2>/dev/null
+grep -E "(useradd|groupadd|usermod|passwd:)" ./exports/auth_all.log
 
 # Login history from wtmp (all logins / logouts with duration)
 last -F -f /mnt/linux_mount/var/log/wtmp | tee ./exports/wtmp_logins.txt
@@ -424,33 +427,56 @@ journalctl \
 ## System Logs
 
 ```bash
-# Syslog / messages — general system activity
-cat /mnt/linux_mount/var/log/syslog 2>/dev/null || \
-cat /mnt/linux_mount/var/log/messages 2>/dev/null | \
-  tee ./exports/syslog_raw.txt
+# Syslog / messages — consolidate all rotated logs
+{
+  for f in $(ls /mnt/linux_mount/var/log/syslog* \
+                /mnt/linux_mount/var/log/messages* 2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/syslog_all.txt
+echo "Consolidated: $(wc -l < ./exports/syslog_all.txt) syslog records"
 
 # Kernel log — module loading visible here (rootkit installation indicator)
-cat /mnt/linux_mount/var/log/kern.log 2>/dev/null | \
-  tee ./exports/kern_log.txt
-
-grep -iE "(module|insmod|rmmod|modprobe)" ./exports/kern_log.txt
+{
+  for f in $(ls /mnt/linux_mount/var/log/kern.log* 2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/kern_all.log
+grep -iE "(module|insmod|rmmod|modprobe)" ./exports/kern_all.log
 
 # Cron execution log
-cat /mnt/linux_mount/var/log/cron.log 2>/dev/null || \
-cat /mnt/linux_mount/var/log/cron     2>/dev/null | \
-  tee ./exports/cron_log.txt
+{
+  for f in $(ls /mnt/linux_mount/var/log/cron.log* \
+                /mnt/linux_mount/var/log/cron \
+                /mnt/linux_mount/var/log/cron.* 2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/cron_all.log
 
 # Package manager log — what was installed / removed and when
 # Debian/Ubuntu:
-grep " install \| remove " /mnt/linux_mount/var/log/dpkg.log 2>/dev/null | \
-  tee ./exports/dpkg_changes.txt
+{
+  for f in $(ls /mnt/linux_mount/var/log/dpkg.log* 2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/dpkg_all.log
+grep " install \| remove " ./exports/dpkg_all.log | tee ./exports/dpkg_changes.txt
 
 # RHEL (yum):
-cat /mnt/linux_mount/var/log/yum.log 2>/dev/null | tee ./exports/yum_log.txt
+{
+  for f in $(ls /mnt/linux_mount/var/log/yum.log* 2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/yum_all.log
+cat ./exports/yum_all.log | tee ./exports/yum_log.txt
 
 # RHEL (dnf):
-grep "Installed\|Removed" /mnt/linux_mount/var/log/dnf.log 2>/dev/null | \
-  tee ./exports/dnf_changes.txt
+{
+  for f in $(ls /mnt/linux_mount/var/log/dnf.log* 2>/dev/null | sort -Vr); do
+    case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+  done
+} > ./exports/dnf_all.log
+grep "Installed\|Removed" ./exports/dnf_all.log | tee ./exports/dnf_changes.txt
 ```
 
 ---
