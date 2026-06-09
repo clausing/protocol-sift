@@ -465,36 +465,27 @@ grep -hE \
   grep -v "^#" | tee ./exports/gitconfig_exec_keys.txt
 
 # Flag values that reference suspicious paths or inline shell payloads
+# Includes /dev/. to catch hidden paths under /dev (e.g. /dev/... /dev/.sneaky)
 grep -hE \
-  "(/tmp/|/dev/shm|/var/tmp/|\\\$\(|base64|wget|curl|nc |ncat |bash -i|python.*-c|perl.*-e|/dev/tcp)" \
+  "(/tmp/|/dev/shm|/dev/\.|/var/tmp/|\$\(|base64|wget|curl|nc |ncat |bash -i|python.*-c|perl.*-e|/dev/tcp)" \
   $(cat ./exports/gitconfig_files.txt) 2>/dev/null | \
   tee ./exports/gitconfig_suspicious.txt
 ```
 
-> **`/dev/shm` payload note:** The gitconfig key is persistent (on disk, recoverable
-> in offline forensics). The *payload binary* dropped to `/dev/shm` is **not** —
-> `/dev/shm` is a tmpfs mount that does not survive reboots and is absent from disk
-> images. To find the binary itself:
-> - Live system: `find /dev/shm /tmp /var/tmp -maxdepth 5 -type f -ls 2>/dev/null`
-> - Memory dump: run `linux.bash`, `linux.pslist`, `linux.cmdline` in Volatility —
->   look for processes whose path or argv[0] points into `/dev/shm`, `/tmp`, or hidden
->   directories
-> - Auditd: search `./exports/audit_all.log` for `execve` events with `nametype=NORMAL`
->   and path matching `/dev/shm` or `/tmp/\.`
+> **Payload location note:** The gitconfig key is persistent (on disk, recoverable in
+> offline forensics). Payload binaries dropped to `/dev/shm`, `/run`, or `/tmp` (tmpfs)
+> do not survive reboots and are absent from disk images — see the Volatile Data section
+> in `linux-artifacts/SKILL.md` for live capture and auditd/memory pivot commands.
 
 ```bash
-# Live system — enumerate volatile storage (run on live evidence only)
-find /dev/shm /tmp /var/tmp -maxdepth 5 \( -type f -o -type d \) -ls 2>/dev/null | \
-  tee ./exports/volatile_storage.txt
+# Hidden files and directories under /dev on the disk image
+# devtmpfs is mounted over /dev at boot on live systems, masking anything
+# placed on the underlying filesystem. In offline analysis these ARE visible.
+# Attackers use names like /dev/... (three dots) or /dev/.hidden to exploit this.
+find /mnt/linux_mount/dev -maxdepth 3 -name ".*" \
+  2>/dev/null | tee ./exports/dev_hidden.txt
 
-# Offline — check auditd for execve from volatile paths
-grep -E "name=\"(/dev/shm|/tmp/\.|/var/tmp/\.)" \
-  ./exports/audit_all.log 2>/dev/null | \
-  tee ./exports/volatile_execve.txt
-
-# Offline — check shell history for commands run from volatile paths
-grep -rE "(^|[ ;|&`])/dev/shm/|/tmp/\.|/var/tmp/\." \
-  /mnt/linux_mount/home/*/.bash_history \
-  /mnt/linux_mount/root/.bash_history 2>/dev/null | \
-  tee ./exports/volatile_history_refs.txt
+# Executable files directly in /dev — unusual on any clean system
+find /mnt/linux_mount/dev -maxdepth 3 -type f -executable \
+  2>/dev/null | tee -a ./exports/dev_hidden.txt
 ```
