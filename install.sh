@@ -100,6 +100,7 @@ SKILLS=(
     windows-artifacts
     yara-hunting
     linux-artifacts
+    linux-persistence
 )
 
 info "Installing skills…"

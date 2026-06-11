@@ -17,18 +17,27 @@ correct tool permissions but zero workflow guidance.
 
 ## Summary of Changes
 
-| Priority | Type | File | Change |
-|----------|------|------|--------|
-| Critical | **New** | `skills/linux-artifacts/SKILL.md` | Full Linux artifact analysis skill (new) |
-| Critical | Update | `skills/memory-analysis/SKILL.md` | Add Linux Volatility 3 section |
-| Important | Update | `global/CLAUDE.md` | Add Linux routing entry + tool paths |
-| Important | Update | `skills/plaso-timeline/SKILL.md` | Expand `linux` parser documentation |
-| Important | Update | `skills/sleuthkit/SKILL.md` | Add Linux artifact extraction block |
-| Important | **New** | `case-templates/linux-CLAUDE.md` | Linux case template with session setup block |
-| Minor | Update | `skills/yara-hunting/SKILL.md` | Add ELF module + Linux Velociraptor |
-| Minor | Update | `global/settings.json` | Add Linux tool permissions |
-| Minor | Update | `install.sh` | Install new linux-artifacts skill dir |
-| Minor | **New** | `analysis-scripts/md2pdf.py` | Generic Markdown → PDF converter (replaces `generate_pdf_report.py`) |
+| Priority | Type | File | Change | Status |
+|----------|------|------|--------|--------|
+| Critical | **New** | `skills/linux-artifacts/SKILL.md` | Full Linux artifact analysis skill (new) | Done |
+| Critical | **New** | `skills/linux-persistence/SKILL.md` | Persistence mechanisms split out from linux-artifacts (size reduction) | Done — on `test-skill-split` |
+| Critical | Update | `skills/memory-analysis/SKILL.md` | Add Linux Volatility 3 section | Done |
+| Important | Update | `global/CLAUDE.md` | Add Linux routing entry + tool paths | Done |
+| Important | Update | `skills/plaso-timeline/SKILL.md` | Expand `linux` parser documentation | **Pending** |
+| Important | Update | `skills/sleuthkit/SKILL.md` | Add Linux artifact extraction block | Done |
+| Important | **New** | `case-templates/linux-CLAUDE.md` | Linux case template with session setup block | Done |
+| Minor | Update | `skills/yara-hunting/SKILL.md` | Add ELF module + Linux Velociraptor | **Pending** |
+| Minor | Update | `global/settings.json` | Add Linux tool permissions + forensic audit log fix | Done |
+| Minor | Update | `install.sh` | Install linux-artifacts + linux-persistence skill dirs | Done |
+| Minor | **New** | `analysis-scripts/md2pdf.py` | Generic Markdown → PDF converter (replaces `generate_pdf_report.py`) | Done |
+| Fix | Update | `skills/linux-artifacts/SKILL.md` | Rotated log consolidation: auditd, auth.log, syslog, kern.log, cron, dpkg/yum/dnf — single hardcoded path silently skipped rotated files | Done — on `support-linux-cases` + `test-skill-split` |
+| Fix | Update | `skills/linux-artifacts/SKILL.md` | SSH session guard: short connections have benign explanations (SFTP, port-forward, automated); require corroborating evidence before concluding compromise | Done — on `support-linux-cases` + `test-skill-split` |
+| Fix | Update | `global/settings.json`, `global/CLAUDE.md` | Forensic audit log: `$CONVERSATION_SUMMARY` env var doesn't exist in Stop hooks; replaced with Claude-written session summary + SESSION-CLOSED terminator | Done — on `support-linux-cases` + `test-skill-split` |
+| Enhancement | Update | `skills/linux-persistence/SKILL.md` | gitconfig exec-key abuse (pager, filter, credential.helper, alias.!) + `/dev` hidden-file check (devtmpfs masks these on live systems) | Done — on `test-skill-split` |
+| Enhancement | Update | `skills/linux-persistence/SKILL.md` | Tool RC files: tmux (`run-shell`, `default-command`), vim/nvim (`system()`, `autocmd`), GNU Screen (`exec`, `shell`, `backtick`), Emacs (`shell-command`, `start-process-shell`) | Done — on `test-skill-split` |
+| Enhancement | Update | `skills/linux-persistence/SKILL.md` | User-level systemd services (`~/.config/systemd/user/`) — not covered by system-level service checks | Done — on `test-skill-split` |
+| Enhancement | Update | `skills/linux-persistence/SKILL.md` | Sudo NOPASSWD + non-standard sudoers entries; Polkit JS rules granting unconditional privilege | Done — on `test-skill-split` |
+| Enhancement | Update | `skills/linux-persistence/SKILL.md` | Cloud/container credential helpers: AWS `credential_process`, kubectl exec plugins, Docker `credsStore`/`credHelpers` | Done — on `test-skill-split` |
 
 ---
 
