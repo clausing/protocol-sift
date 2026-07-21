@@ -533,27 +533,32 @@ ls /mnt/linux_mount/var/log/audit/audit.log* 2>/dev/null | sort -V
 } > ./exports/audit_all.log
 echo "Consolidated: $(wc -l < ./exports/audit_all.log) audit records"
 
+# WARNING: Do NOT add -i to ausearch/aureport for offline analysis.
+# -i translates UIDs using the *analysis system's* /etc/passwd, not the
+# image's — wrong usernames when UIDs differ. Keep UIDs numeric.
+# Also: -if specifies the input log file; -f searches for a file path in events.
+
 # All execution events
-ausearch -i -sc execve \
-  -f ./exports/audit_all.log 2>/dev/null | \
+ausearch -sc execve \
+  -if ./exports/audit_all.log 2>/dev/null | \
   tee ./exports/audit_execve.txt
 
-# Specific user's activity by UID
-ausearch -i -ua <uid> \
-  -f ./exports/audit_all.log 2>/dev/null
+# Specific user's activity by UID (numeric — cross-reference image passwd below)
+ausearch -ua <uid> \
+  -if ./exports/audit_all.log 2>/dev/null
 
 # Failed authentications
-ausearch -i -m USER_AUTH -sv no \
-  -f ./exports/audit_all.log 2>/dev/null
+ausearch -m USER_AUTH -sv no \
+  -if ./exports/audit_all.log 2>/dev/null
 
 # Outbound network connections (connect syscall)
-ausearch -i -sc connect \
-  -f ./exports/audit_all.log 2>/dev/null | \
+ausearch -sc connect \
+  -if ./exports/audit_all.log 2>/dev/null | \
   tee ./exports/audit_network.txt
 
 # Sudo / privilege escalation commands
-ausearch -i -m USER_CMD \
-  -f ./exports/audit_all.log 2>/dev/null
+ausearch -m USER_CMD \
+  -if ./exports/audit_all.log 2>/dev/null
 
 # Summary reports
 aureport --summary     -if ./exports/audit_all.log 2>/dev/null
@@ -561,19 +566,38 @@ aureport -au --summary -if ./exports/audit_all.log 2>/dev/null
 aureport -x  --summary -if ./exports/audit_all.log 2>/dev/null
 aureport --anomaly     -if ./exports/audit_all.log 2>/dev/null
 
-# PROCTITLE is hex-encoded — decode it to readable command lines
+# UID→username map from the *image* /etc/passwd (not the analysis system)
+awk -F: 'BEGIN{OFS="\t"} {print $3,$1,$5}' /mnt/linux_mount/etc/passwd \
+  | sort -n | column -t
+
+# Decode PROCTITLE hex → readable command (null bytes are argv separators → spaces).
+# Pipe full ausearch output without grep pre-filter so event groups stay intact;
+# uid is read from the SYSCALL record in the same event group.
 ausearch -m EXECVE \
-  -f ./exports/audit_all.log 2>/dev/null | \
-  grep "proctitle=" | python3 -c "
-import sys
+  -if ./exports/audit_all.log 2>/dev/null | python3 -c "
+import sys, re
+event_ts, uid, pt = '', '', ''
 for line in sys.stdin:
-    for field in line.strip().split():
-        if field.startswith('proctitle='):
-            val = field.split('=', 1)[1]
-            try:
-                print(bytes.fromhex(val).decode('utf-8', errors='replace'))
-            except ValueError:
-                print(val)
+    line = line.rstrip()
+    if line == '----':
+        if pt:
+            print(f'{event_ts}\tuid={uid}\t{pt}')
+        event_ts, uid, pt = '', '', ''
+        continue
+    if not event_ts:
+        m = re.search(r'msg=audit\((\d+\.\d+)', line)
+        if m: event_ts = m.group(1)
+    if not uid:
+        m = re.search(r'\buid=(\d+)', line)
+        if m: uid = m.group(1)
+    m = re.search(r'proctitle=([0-9A-Fa-f]{4,})', line)
+    if m:
+        try:
+            pt = bytes.fromhex(m.group(1)).replace(b'\x00', b' ').decode('utf-8', errors='replace').strip()
+        except ValueError:
+            pt = m.group(1)
+if pt:
+    print(f'{event_ts}\tuid={uid}\t{pt}')
 "
 ```
 
@@ -1068,8 +1092,9 @@ awk -F'|' -v t1=$T1 -v t2=$T2 \
   absence of timestamps is expected, not suspicious
 - `journalctl --directory` is preferred over `--file` when multiple journal files
   exist in a directory; use `--file` for a single specific journal file
-- `ausearch -f <file>` reads an offline audit log; without `-f` it queries the
-  live system — always specify `-f` for offline evidence
+- `ausearch -if <file>` reads an offline audit log; without `-if` it queries the
+  live system — always specify `-if` for offline evidence (`-f` means search for
+  events involving a specific file path, not the input log)
 - Package integrity checks (`dpkg -V`, `rpm -Va`) detect replaced system binaries
   by comparing file hashes against the package database records
 - Correlate across sources: cron persistence + new executable in /tmp + outbound

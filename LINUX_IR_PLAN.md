@@ -225,40 +225,63 @@ auditing combined. Only valuable if auditd was running on the target.
 cat /mnt/linux_mount/etc/audit/auditd.conf
 cat /mnt/linux_mount/etc/audit/rules.d/*.rules
 
-# All execution events (requires auditd execve rule)
-ausearch -i -sc execve -f /mnt/linux_mount/var/log/audit/audit.log
+# WARNING: Do NOT add -i to ausearch/aureport for offline analysis.
+# -i translates UIDs using the *analysis system's* /etc/passwd, not the
+# image's — wrong usernames when UIDs differ. Keep UIDs numeric.
+# Also: -if specifies the input log file; -f searches for a file path in events.
 
-# Specific user's activity by UID
-ausearch -i -ua <uid> -f /mnt/linux_mount/var/log/audit/audit.log
+# All execution events (requires auditd execve rule)
+ausearch -sc execve -if /mnt/linux_mount/var/log/audit/audit.log
+
+# Specific user's activity by UID (numeric — cross-reference image passwd below)
+ausearch -ua <uid> -if /mnt/linux_mount/var/log/audit/audit.log
 
 # Failed authentication events
-ausearch -i -m USER_AUTH -sv no -f /mnt/linux_mount/var/log/audit/audit.log
+ausearch -m USER_AUTH -sv no -if /mnt/linux_mount/var/log/audit/audit.log
 
 # Network connection events (outbound)
-ausearch -i -sc connect -f /mnt/linux_mount/var/log/audit/audit.log
+ausearch -sc connect -if /mnt/linux_mount/var/log/audit/audit.log
 
 # Sudo commands
-ausearch -i -m USER_CMD -f /mnt/linux_mount/var/log/audit/audit.log
+ausearch -m USER_CMD -if /mnt/linux_mount/var/log/audit/audit.log
 
 # Summary reports
-aureport --summary -if /mnt/linux_mount/var/log/audit/audit.log
+aureport --summary     -if /mnt/linux_mount/var/log/audit/audit.log
 aureport -au --summary -if /mnt/linux_mount/var/log/audit/audit.log   # auth
-aureport -x --summary -if /mnt/linux_mount/var/log/audit/audit.log    # executables
-aureport --anomaly -if /mnt/linux_mount/var/log/audit/audit.log
+aureport -x  --summary -if /mnt/linux_mount/var/log/audit/audit.log   # executables
+aureport --anomaly     -if /mnt/linux_mount/var/log/audit/audit.log
 
-# PROCTITLE is hex-encoded — decode it
-ausearch -m EXECVE -if /mnt/linux_mount/var/log/audit/audit.log | \
-  grep proctitle= | \
-  python3 -c "
-import sys
+# UID→username map from the *image* /etc/passwd (not the analysis system)
+awk -F: 'BEGIN{OFS="\t"} {print $3,$1,$5}' /mnt/linux_mount/etc/passwd \
+  | sort -n | column -t
+
+# Decode PROCTITLE hex → readable command (null bytes are argv separators → spaces).
+# Pipe full ausearch output without grep pre-filter so event groups stay intact;
+# uid is read from the SYSCALL record in the same event group.
+ausearch -m EXECVE -if /mnt/linux_mount/var/log/audit/audit.log | python3 -c "
+import sys, re
+event_ts, uid, pt = '', '', ''
 for line in sys.stdin:
-    for field in line.split():
-        if field.startswith('proctitle='):
-            val = field.split('=',1)[1]
-            try:
-                print(bytes.fromhex(val).decode('utf-8', errors='replace'))
-            except ValueError:
-                print(val)
+    line = line.rstrip()
+    if line == '----':
+        if pt:
+            print(f'{event_ts}\tuid={uid}\t{pt}')
+        event_ts, uid, pt = '', '', ''
+        continue
+    if not event_ts:
+        m = re.search(r'msg=audit\((\d+\.\d+)', line)
+        if m: event_ts = m.group(1)
+    if not uid:
+        m = re.search(r'\buid=(\d+)', line)
+        if m: uid = m.group(1)
+    m = re.search(r'proctitle=([0-9A-Fa-f]{4,})', line)
+    if m:
+        try:
+            pt = bytes.fromhex(m.group(1)).replace(b'\x00', b' ').decode('utf-8', errors='replace').strip()
+        except ValueError:
+            pt = m.group(1)
+if pt:
+    print(f'{event_ts}\tuid={uid}\t{pt}')
 "
 ```
 
@@ -996,7 +1019,7 @@ vol -f <image.img> linux.proc_maps --pid <PID> --dump \
 | Tool | Invocation | Notes |
 |------|-----------|-------|
 | **journalctl** | `journalctl --directory <path> --utc` | Use `--directory` to read offline journal from mounted evidence |
-| **ausearch** | `ausearch -i -f <audit.log>` | Search auditd records |
+| **ausearch** | `ausearch -if <audit.log>` | Search auditd records; `-if` = input log file, `-f` = filter by file path |
 | **aureport** | `aureport --summary -if <audit.log>` | Summarize auditd log |
 | **rkhunter** | `sudo rkhunter --check --rootdir /mnt/linux_mount` | Use `--rootdir` for offline mounted image |
 | **chkrootkit** | `sudo chkrootkit -r /mnt/linux_mount` | Use `-r` for offline mounted image |
