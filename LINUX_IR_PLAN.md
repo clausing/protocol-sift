@@ -767,7 +767,7 @@ sudo find /mnt/linux_mount/var/log/journal -name "*.journal" \
 | Audit log | `/var/log/audit/audit.log` | same |
 | Systemd journal | `/var/log/journal/<machine-id>/` | same |
 | Cron log | `/var/log/cron.log` | `/var/log/cron` |
-| Package log | `/var/log/dpkg.log` | `/var/log/yum.log` |
+| Package log | `/var/log/dpkg.log` | `/var/log/yum.log` (EL≤7) / `/var/log/dnf.log` (EL8+) |
 | Login history (binary) | `/var/log/wtmp` | same |
 | Failed logins (binary) | `/var/log/btmp` | same |
 | Last login per user | `/var/log/lastlog` | same |

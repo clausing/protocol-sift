@@ -1044,7 +1044,7 @@ awk -F'|' -v t1=$T1 -v t2=$T2 \
 | Audit log | `/var/log/audit/audit.log` | same |
 | Systemd journal | `/var/log/journal/<machine-id>/` | same |
 | Cron log | `/var/log/cron.log` | `/var/log/cron` |
-| Package install log | `/var/log/dpkg.log` | `/var/log/yum.log` |
+| Package install log | `/var/log/dpkg.log` | `/var/log/yum.log` (EL≤7) / `/var/log/dnf.log` (EL8+) |
 | Login history (wtmp) | `/var/log/wtmp` | same |
 | Failed logins (btmp) | `/var/log/btmp` | same |
 | Last login per user | `/var/log/lastlog` | same |
