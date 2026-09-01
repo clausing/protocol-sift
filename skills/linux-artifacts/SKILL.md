@@ -142,7 +142,7 @@ fi
 **Adapting disk-image commands to UAC:** replace `/mnt/linux_mount` with `$UAC`.
 Most `grep`, `find`, `cat`, and `awk` commands in this skill work unchanged with
 that substitution. Tool-based analysis that requires a mounted block device
-(`journalctl --directory`, `last -f`, `ausearch -f`) still works if the relevant
+(`journalctl --directory`, `last -f`, `ausearch -if`) still works if the relevant
 files were collected:
 
 ```bash
@@ -189,7 +189,7 @@ grep "Accepted\|Failed\|sudo:" "$UAC/var/log/auth.log" 2>/dev/null
 | Tool | Purpose | Notes |
 |------|---------|-------|
 | `journalctl` | Read systemd journal (incl. offline) | Use `--file` or `--directory` for mounted evidence |
-| `ausearch` | Search auditd logs | Use `-f` for offline log file |
+| `ausearch` | Search auditd logs | Use `-if` for offline log file |
 | `aureport` | Summarize auditd logs | Use `-if` for offline log file |
 | `last` | Login history from wtmp | Use `-F -f <path>` for full timestamps + offline file |
 | `lastb` | Failed login history from btmp | Use `-F -f <path>` for full timestamps + offline file |
