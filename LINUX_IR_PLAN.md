@@ -173,6 +173,12 @@ last -F -f /mnt/linux_mount/var/log/wtmp | head -100
 
 # Failed login attempts (btmp)
 lastb -F -f /mnt/linux_mount/var/log/btmp | head -100
+
+# Journald equivalent — use when auth.log/secure is missing (journald-only
+# distro, no rsyslog) or may have been deleted/truncated by an attacker
+journalctl \
+  --file /mnt/linux_mount/var/log/journal/<machine-id>/*.journal \
+  --facility auth,authpriv --utc --no-pager
 ```
 
 #### 4. Systemd Journal (journalctl)

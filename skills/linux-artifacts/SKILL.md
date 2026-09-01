@@ -352,6 +352,15 @@ lastb -F -f /mnt/linux_mount/var/log/btmp 2>/dev/null | \
 
 # Last login per account
 lastlog --root /mnt/linux_mount 2>/dev/null | tee ./exports/lastlog.txt
+
+# Journald equivalent — use when auth.log/secure is missing (journald-only
+# distro, no rsyslog) or may have been deleted/truncated by an attacker.
+# journald tags auth/PAM/sudo/sshd messages with the auth,authpriv syslog
+# facility regardless of whether rsyslog also wrote a flat file.
+MACHINE_ID=$(cat /mnt/linux_mount/etc/machine-id 2>/dev/null)
+journalctl \
+  --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
+  --facility auth,authpriv --utc --no-pager | tee ./exports/journal_auth_facility.txt
 ```
 
 > **Short SSH sessions — do NOT conclude compromise without corroboration.**
@@ -449,6 +458,7 @@ journalctl \
 | `-k` | Kernel: module loads, panics, hardware |
 | `-p err` | All error-level and above events |
 | `_SYSTEMD_UNIT=<name>.service` | Specific service events |
+| `--facility auth,authpriv` | Equivalent of `/var/log/auth.log` / `/var/log/secure` — use when the flat file is missing or possibly tampered |
 
 ---
 
