@@ -361,7 +361,49 @@ MACHINE_ID=$(cat /mnt/linux_mount/etc/machine-id 2>/dev/null)
 journalctl \
   --directory /mnt/linux_mount/var/log/journal/${MACHINE_ID}/ \
   --facility auth,authpriv --utc --no-pager | tee ./exports/journal_auth_facility.txt
+
+# Precondition: confirm a persistent journal exists before comparing — a
+# volatile-only journal (Storage=auto, /run/log/journal) does not survive
+# shutdown and makes this comparison moot.
+find /mnt/linux_mount/var/log/journal -name "*.journal" 2>/dev/null
+
+# Bucket both sources to the hour (both use "Mon DD HH:MM:SS ..." by default)
+# and compare event counts per hour. Do NOT diff line-by-line — journal and
+# syslog text formatting differ enough to produce noise, not signal.
+awk '{print $1,$2,$3}' ./exports/auth_all.log | sort | uniq -c \
+  > ./exports/auth_hourly_flatfile.txt
+awk '{print $1,$2,$3}' ./exports/journal_auth_facility.txt | sort | uniq -c \
+  > ./exports/auth_hourly_journal.txt
+diff ./exports/auth_hourly_flatfile.txt ./exports/auth_hourly_journal.txt
 ```
+
+> **Journal-vs-flat-file auth log mismatch — corroborate before calling it
+> tampering.** A persistent journal is harder to selectively edit than a text
+> file, so an hour where the journal has *more* auth events than the flat file
+> is worth a look. But count mismatches have benign causes far more often than
+> not:
+>
+> | Observation | Likely explanation | Tamper-relevant? |
+> |---|---|---|
+> | Flat file has more events than journal | journald rate-limiting (`RateLimitBurst`/`RateLimitIntervalSec`) can drop entries before they reach the journal while rsyslog still receives them | No — expected |
+> | Journal has more events, near the retention boundary | `SystemMaxUse=`/time-based journal vacuuming purged entries the flat file (different rotation policy) still has | No — expected |
+> | `find ... *.journal` returns nothing | `Storage=auto`/volatile journal — didn't survive shutdown | Comparison not possible |
+> | Journal has more events, mid-window, no rate-limit or vacuuming explanation | — | **Worth investigating** |
+>
+> Before writing a "log tampering" finding, require at least one corroborating
+> artifact:
+> - The missing window in the flat file has no matching `systemd-journald`
+>   "Suppressed N messages" entry nearby (that marker indicates rate-limiting,
+>   not deletion)
+> - Flat-file timestamps (`stat`) inconsistent with normal rotation/rewrite —
+>   e.g. ctime newer than mtime, or an mtime gap matching the missing window
+> - Independent corroboration for the missing events: wtmp/btmp, auditd, or
+>   shell history showing activity the flat auth log doesn't
+>
+> If none are present, report: _"Journal/flat-file auth log event-count
+> mismatch observed for \<window\>; consistent with journald rate-limiting or
+> retention rather than tampering. Investigate further before concluding log
+> manipulation."_
 
 > **Short SSH sessions — do NOT conclude compromise without corroboration.**
 > Sessions lasting only seconds are common for non-interactive use cases that leave

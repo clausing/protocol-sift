@@ -179,6 +179,11 @@ lastb -F -f /mnt/linux_mount/var/log/btmp | head -100
 journalctl \
   --file /mnt/linux_mount/var/log/journal/<machine-id>/*.journal \
   --facility auth,authpriv --utc --no-pager
+
+# Tamper check: compare hourly event counts, flat file vs journal. Journal
+# has more events than the flat file for a window = worth investigating;
+# reverse is usually journald rate-limiting, not evidence of anything.
+# Requires a persistent journal — see full caveats in linux-artifacts skill.
 ```
 
 #### 4. Systemd Journal (journalctl)
