@@ -23,10 +23,10 @@ correct tool permissions but zero workflow guidance.
 | Critical | **New** | `skills/linux-persistence/SKILL.md` | Persistence mechanisms split out from linux-artifacts (size reduction) | Done — on `test-skill-split` |
 | Critical | Update | `skills/memory-analysis/SKILL.md` | Add Linux Volatility 3 section | Done |
 | Important | Update | `global/CLAUDE.md` | Add Linux routing entry + tool paths | Done |
-| Important | Update | `skills/plaso-timeline/SKILL.md` | Expand `linux` parser documentation | **Pending** |
+| Important | Update | `skills/plaso-timeline/SKILL.md` | Expand `linux` parser documentation | Done — verified 2026-09-02, already covered `--parsers linux`, `psort.py l2tcsv`, and offline `systemd_journal` parsing (the plaso parser is `systemd_journal`, not `linux_journald` as originally noted here) |
 | Important | Update | `skills/sleuthkit/SKILL.md` | Add Linux artifact extraction block | Done |
 | Important | **New** | `case-templates/linux-CLAUDE.md` | Linux case template with session setup block | Done |
-| Minor | Update | `skills/yara-hunting/SKILL.md` | Add ELF module + Linux Velociraptor | **Pending** |
+| Minor | Update | `skills/yara-hunting/SKILL.md` | Add ELF module + Linux Velociraptor | Done — verified 2026-09-02, already covered `import "elf"` and a Linux Artifacts Velociraptor table |
 | Minor | Update | `global/settings.json` | Add Linux tool permissions + forensic audit log fix | Done |
 | Minor | Update | `install.sh` | Install linux-artifacts + linux-persistence skill dirs | Done |
 | Minor | **New** | `analysis-scripts/md2pdf.py` | Generic Markdown → PDF converter (replaces `generate_pdf_report.py`) | Done |
