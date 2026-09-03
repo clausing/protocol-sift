@@ -397,6 +397,24 @@ python3 /opt/volatility3-2.20.0/vol.py -f <image.lime> linux.info
 # Determine the exact kernel version from the image (needed for all options below)
 strings <image.lime> | grep "Linux version" | head -3
 
+# Option 1: pre-built ISF from a community-maintained repo — check this first;
+# skip generation entirely if the target kernel is already covered. Covers
+# common Ubuntu/Debian/KaliLinux/AlmaLinux/RockyLinux kernels.
+# https://github.com/Abyss-W4tcher/volatility3-symbols
+
+# Find the exact filename for your kernel via the banners index:
+wget https://raw.githubusercontent.com/Abyss-W4tcher/volatility3-symbols/master/banners/banners_plain.json
+grep "<kernel-version-string-from-linux.info-output>" banners_plain.json
+
+# Download the matching ISF directly into the symbols directory (path follows
+# <Distro>/<arch>/<base-kernel>/<ABI>/[<flavour>]/<file>.json.xz — read off
+# the banners index above):
+wget https://github.com/Abyss-W4tcher/volatility3-symbols/raw/master/<path-to-file> \
+  -P /opt/volatility3-*/volatility3/symbols/linux/
+
+# Alternative: skip the download and point vol.py at the repo directly with
+# --remote-isf-url <raw-github-url-to-the-.json.xz>
+
 # Option 2: btf2json — kernels ≥5.2, no debug package needed (preferred over dwarf2json)
 # Requires uncompressed vmlinux (ELF); most distros ship only compressed vmlinuz.
 
@@ -422,9 +440,6 @@ dwarf2json linux \
   --elf /usr/lib/debug/boot/vmlinux-<exact-kernel-version> \
   > /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
 xz /opt/volatility3-*/volatility3/symbols/linux/<distro>-<kernel>.json
-
-# Pre-built ISFs for common Ubuntu/Debian/CentOS kernels:
-# https://github.com/Abyss-W4tcher/volatility3-symbols
 ```
 
 ### Linux Plugin Reference
