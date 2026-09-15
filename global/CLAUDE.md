@@ -26,8 +26,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Output routing** — Write all scripts, CSVs, JSON, and reports to `./analysis/`, `./exports/`, or `./reports/`. Never write to `/` or evidence directories.
 - **Timestamps** — Always output in UTC.
 - **Verification** — Verify tool success after every run. On failure: read stderr → hypothesize → correct → retry.
-- **Session audit** — At the end of every investigation, before delivering final findings,
-  append a structured entry to `./analysis/forensic_audit.log`:
+- **Forensic audit log** — `./analysis/forensic_audit.log` is machine-generated:
+  a `PreToolUse`/`PostToolUse`/`SessionStart`/`SessionEnd` hook chain appends a
+  hash-chained JSONL entry for every `Bash` and `Write` call automatically.
+  Never write to this file directly — it is evidence, not a scratch log.
+- **Session summary** — At the end of every investigation, before delivering
+  final findings, append a structured, human-readable entry to
+  `./reports/session_summary.md`. This is analyst/LLM commentary for
+  orientation, not evidence — the audit log above is the source of truth for
+  what actually ran:
   ```bash
   {
     echo "=== INVESTIGATION SESSION ==="
@@ -38,7 +45,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     echo "Findings  : <2–4 line narrative of key findings and conclusions>"
     echo "=== END SESSION ==="
     echo ""
-  } >> ./analysis/forensic_audit.log
+  } >> ./reports/session_summary.md
   ```
 
 ---

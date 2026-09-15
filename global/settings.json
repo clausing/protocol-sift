@@ -160,12 +160,44 @@
     ]
   },
   "hooks": {
-    "Stop": [
+    "PreToolUse": [
+      {
+        "matcher": "Bash, Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/analysis-scripts/audit_hook.py pre"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash, Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/analysis-scripts/audit_hook.py post"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p ./analysis/ && echo \"$(date -u '+%Y-%m-%dT%H:%M:%SZ') SESSION-CLOSED $(pwd)\" >> ./analysis/forensic_audit.log"
+            "command": "python3 ~/.claude/analysis-scripts/audit_hook.py session_open"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/analysis-scripts/audit_hook.py session_close"
           }
         ]
       }

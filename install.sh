@@ -128,6 +128,22 @@ if [[ -f "$src" ]]; then
 else
     warn "  analysis-scripts/md2pdf.py not found, skipping."
 fi
+
+src="$REPO_DIR/analysis-scripts/audit_hook.py"
+if [[ -f "$src" ]]; then
+    cp "$src" "$CLAUDE_DIR/analysis-scripts/audit_hook.py"
+    ok "  audit_hook.py → $CLAUDE_DIR/analysis-scripts/"
+else
+    warn "  analysis-scripts/audit_hook.py not found, skipping."
+fi
+
+src="$REPO_DIR/analysis-scripts/verify_audit_log.py"
+if [[ -f "$src" ]]; then
+    cp "$src" "$CLAUDE_DIR/analysis-scripts/verify_audit_log.py"
+    ok "  verify_audit_log.py → $CLAUDE_DIR/analysis-scripts/"
+else
+    warn "  analysis-scripts/verify_audit_log.py not found, skipping."
+fi
 echo
 
 # ── case template (kept in ~/.claude for reuse) ───────────────────────────────

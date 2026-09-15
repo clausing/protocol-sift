@@ -412,9 +412,15 @@ claude
 ## Notes on Chain of Custody
 
 - Claude never writes to `/cases/`, `/mnt/`, or `/media/` — enforced by `settings.json`
-- Claude appends a structured session summary (artifacts, tools, findings) to
-  `./analysis/forensic_audit.log` before delivering final findings; the `Stop`
-  hook then appends a `SESSION-CLOSED` timestamp as a terminator — review this
-  log as part of your case documentation
+- `./analysis/forensic_audit.log` is a machine-generated, hash-chained record —
+  a `PreToolUse`/`PostToolUse`/`SessionStart`/`SessionEnd` hook chain appends
+  one JSONL entry per `Bash` command and `Write` call automatically, plus
+  session-open/session-close bookends. Claude never writes to it directly.
+  Verify the chain hasn't been altered with
+  `python3 ~/.claude/analysis-scripts/verify_audit_log.py`
+- Claude also appends a human-readable session summary (artifacts, tools,
+  findings) to `./reports/session_summary.md` before delivering final
+  findings — this is analyst/LLM commentary for orientation, not evidence;
+  `forensic_audit.log` is the source of truth for what actually ran
 - All tool outputs use `tee` to write to `./exports/` — raw tool output is preserved
 - Always verify image integrity before analysis: `ewfverify /cases/${CASE}/*.E01`
