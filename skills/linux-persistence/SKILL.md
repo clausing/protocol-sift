@@ -1,3 +1,8 @@
+---
+name: linux-persistence
+description: "Linux persistence mechanism checks (cron, systemd, SUID, shell/profile hooks, etc.) on Debian/Ubuntu and RHEL-family hosts. Use for persistence sweeps as part of a Linux investigation."
+---
+
 # Skill: Linux Persistence Mechanisms
 
 ## Overview

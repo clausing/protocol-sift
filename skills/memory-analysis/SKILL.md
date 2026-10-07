@@ -1,3 +1,8 @@
+---
+name: memory-analysis
+description: "Memory image forensics with Volatility 3 and Memory Baseliner: processes, network, injection, artifact extraction, baseline diffing. Use for any memory image analysis."
+---
+
 # Skill: Memory Forensics (Volatility 3 / Memory Baseliner)
 
 ## Overview

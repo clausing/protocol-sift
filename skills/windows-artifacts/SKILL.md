@@ -1,3 +1,8 @@
+---
+name: windows-artifacts
+description: "Windows host artifact analysis on Linux/SIFT: Eric Zimmerman tools, ASEP/persistence, event log parsing, execution and access evidence. Use when investigating Windows evidence."
+---
+
 # Skill: Windows Artifacts (EZ Tools / Autoruns / Event Logs)
 
 ## Overview

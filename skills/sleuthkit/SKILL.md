@@ -1,3 +1,8 @@
+---
+name: sleuthkit
+description: "Disk image analysis and file carving with The Sleuth Kit and EWF tools (mmls, fls, icat, mactime, ewfmount), read-only mounting of E01 evidence. Use for filesystem navigation and file extraction."
+---
+
 # Skill: File System & Carving (The Sleuth Kit / EWF Tools)
 
 ## Overview

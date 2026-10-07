@@ -1,3 +1,8 @@
+---
+name: yara-hunting
+description: "IOC sweeps, malware identification and threat hunting with YARA and Velociraptor. Use for scanning files or memory images with rules and for hunt design."
+---
+
 # Skill: Threat Hunting & IOC Sweeps (YARA / Velociraptor)
 
 ## Overview

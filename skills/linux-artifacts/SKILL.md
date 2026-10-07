@@ -1,3 +1,8 @@
+---
+name: linux-artifacts
+description: "Linux host artifact analysis on a SIFT workstation: auth logs, systemd journal, auditd, shell history, persistence, rootkit indicators, and extraction from Linux disk images. Use when investigating a Linux host or image."
+---
+
 # Skill: Linux Artifacts (Logs / Persistence / Execution / Rootkits)
 
 ## Overview

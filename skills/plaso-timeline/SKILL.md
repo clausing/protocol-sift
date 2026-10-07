@@ -1,3 +1,8 @@
+---
+name: plaso-timeline
+description: "Timeline generation with Plaso (log2timeline, psort, pinfo, image_export) for supertimelines from disk images and logs. Use when building or filtering a timeline."
+---
+
 # Skill: Timeline Generation (Plaso / log2timeline)
 
 > **Installation:** Plaso 20240308 installed from the GIFT PPA (`ppa:gift/stable`).
