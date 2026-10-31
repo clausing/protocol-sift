@@ -701,6 +701,9 @@ cat ./exports/*_history_all.txt 2>/dev/null | \
 # which lack a passphrase — unprotected keys can be used directly for lateral movement
 # without cracking. Passphrase removal is a secondary possibility but requires knowing
 # the current passphrase; probing costs nothing and reveals the same information.
+# NOTE: if atuin is installed (see "Atuin Shell History" below), the files above may be
+# stale or near-empty even though the user ran many commands — check before concluding
+# history was cleared.
 
 # HISTFILE tampering — attacker may disable history recording
 grep -rE "(HISTSIZE=0|HISTFILESIZE=0|HISTFILE=/dev/null)" \
@@ -714,6 +717,65 @@ grep -rE "(HISTSIZE=0|HISTFILESIZE=0|HISTFILE=/dev/null)" \
 grep -A1 "^#[0-9]\{10\}" ./exports/bash_history_all.txt | \
   awk '/^#/{t=strftime("%Y-%m-%d %H:%M:%S UTC", substr($0,2))} !/^#/{print t, $0}'
 ```
+
+### Atuin Shell History
+
+[Atuin](https://github.com/atuinsh/atuin) replaces/augments native shell history with a
+SQLite database. It records via a shell `preexec` hook, so `.bash_history` / `.zsh_history`
+may be stale or sparse while atuin holds the full record — and it adds `cwd`, exit code,
+duration, hostname and session that native history lacks. The `_dump_hist` helpers above
+do **not** find it.
+
+```bash
+# Detect: database, config, and client key (sync is end-to-end encrypted with this key)
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  \( -path "*/atuin/history.db*" -o -path "*/atuin/config.toml" \
+     -o -path "*/atuin/key" -o -path "*/atuin/session" \) 2>/dev/null
+
+# Also check whether atuin is wired into the shell RC files
+grep -rn "atuin" /mnt/linux_mount/home/*/.bashrc /mnt/linux_mount/home/*/.zshrc \
+  /mnt/linux_mount/home/*/.config/fish/config.fish /mnt/linux_mount/root/.bashrc \
+  /mnt/linux_mount/root/.zshrc 2>/dev/null
+
+# Collect — copy the -wal and -shm files too; recent commands may exist only in the WAL
+sudo mkdir -p ./exports/shell_history/atuin/
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  \( -path "*/atuin/history.db*" -o -path "*/atuin/config.toml" \) \
+  -exec cp --parents -p {} ./exports/shell_history/atuin/ \; 2>/dev/null
+```
+
+Query a **copy** (never the evidence mount). `timestamp` and `duration` are nanoseconds;
+a non-NULL `deleted_at` means the user deleted the entry in atuin but the row survives:
+
+```bash
+for db in $(find ./exports/shell_history/atuin -name history.db); do
+  echo "=== $db ==="
+  sqlite3 -readonly -header -separator '|' "$db" \
+    "SELECT datetime(timestamp/1000000000,'unixepoch') AS utc, hostname, cwd, exit,
+            duration/1000000 AS ms, command, deleted_at
+     FROM history ORDER BY timestamp;"
+done | tee ./exports/atuin_history_all.txt
+
+# Same red-flag filter as other shells
+grep -iE \
+  "(wget|curl|chmod \+x|base64|/dev/shm|/tmp/\.|nc |ncat |bash -i|python.*-c|perl.*-e|mkfifo|ssh-keygen.*-p)" \
+  ./exports/atuin_history_all.txt | tee ./exports/atuin_history_suspicious.txt
+
+# Deleted-in-atuin entries (user or attacker tried to hide these)
+sqlite3 -readonly ./exports/shell_history/atuin/<path>/history.db \
+  "SELECT datetime(timestamp/1000000000,'unixepoch'), command FROM history WHERE deleted_at IS NOT NULL;"
+```
+
+> **Caveats**
+> - Verify column names with `.schema history` first — the layout above is from memory of
+>   atuin's schema and newer versions may add or rename columns.
+> - `config.toml` can set `history_filter` / `cwd_filter` / `secrets_filter`, so absence of a
+>   command is not proof it wasn't run. Read the config before treating the DB as complete.
+> - `sync` / `auto_sync` in `config.toml` means a copy may also exist on the user's atuin
+>   server (default `api.atuin.sh`); the data is E2E encrypted with `~/.local/share/atuin/key`.
+> - Commands run from non-interactive shells (cron, `ssh host cmd`, scripts) usually are
+>   not recorded by either atuin or native history — use auditd execve for those.
+> - Timestamps are the recorded client wall-clock; correlate against auth logs/journal.
 
 ---
 
@@ -969,6 +1031,10 @@ sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
   \( -name ".bash_history" -o -name ".zsh_history" -o -name ".zhistory" \
      -o -path "*/fish/fish_history" -o -name ".history" -o -name ".sh_history" \) \
   -exec cp --parents {} ./exports/shell_history/ \; 2>/dev/null
+# Atuin (SQLite; include -wal/-shm) — see "Atuin Shell History"
+sudo find /mnt/linux_mount/home /mnt/linux_mount/root \
+  \( -path "*/atuin/history.db*" -o -path "*/atuin/config.toml" \) \
+  -exec cp --parents -p {} ./exports/shell_history/ \; 2>/dev/null
 
 # Cron jobs (all locations)
 sudo mkdir -p ./exports/cron/
