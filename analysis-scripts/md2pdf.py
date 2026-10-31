@@ -55,11 +55,15 @@ CSS_STYLE = CSS(string="""
         border-collapse: collapse;
         width: 100%;
         margin: 1em 0;
-        font-size: 10pt;
-        page-break-inside: avoid;
+        font-size: 8pt;
+        page-break-inside: auto;
     }
-    th { background: #333; color: #fff; padding: 6px 10px; text-align: left; }
-    td { padding: 5px 10px; border-bottom: 1px solid #ddd; }
+    tr { page-break-inside: avoid; }
+    th { background: #333; color: #fff; padding: 4px 6px; text-align: left; }
+    td { padding: 3px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
+    /* let long hashes, fingerprints and paths wrap instead of overflowing the page */
+    th, td { overflow-wrap: break-word; }
+    td code { font-size: 7.5pt; overflow-wrap: anywhere; word-break: break-all; }
     tr:nth-child(even) td { background: #f9f9f9; }
     blockquote {
         border-left: 4px solid #aaa;
